@@ -64,6 +64,13 @@
   font-size: 0.9rem;
 }
 
+mark {
+  background: #fbbf2466;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
 .error {
   color: #f87171;
   margin: 0;

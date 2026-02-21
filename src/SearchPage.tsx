@@ -9,6 +9,25 @@ import {
   type TagCacheMeta,
 } from './cache/tagDatabase';
 
+function highlight(text: string, query: string): React.ReactNode {
+  const q = query.trim().toLowerCase();
+  if (!q || !text) return text;
+
+  const parts: React.ReactNode[] = [];
+  const lower = text.toLowerCase();
+  let last = 0;
+  let idx = lower.indexOf(q);
+
+  while (idx !== -1) {
+    if (idx > last) parts.push(text.slice(last, idx));
+    parts.push(<mark key={idx}>{text.slice(idx, idx + q.length)}</mark>);
+    last = idx + q.length;
+    idx = lower.indexOf(q, last);
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
 interface Props {
   initialQuery: string;
   initialResult: SearchResult | null;
@@ -145,13 +164,13 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                 tabIndex={0}
                 onKeyDown={e => e.key === 'Enter' && onSelectTag(tag, query, result)}
               >
-                <span className="tag-title">{tag.title}</span>
+                <span className="tag-title">{highlight(tag.title, query)}</span>
                 {tag.version && (
-                  <span className="tag-version"> — {tag.version}</span>
+                  <span className="tag-version"> — {highlight(tag.version, query)}</span>
                 )}
                 <div className="tag-meta">
                   <span>#{tag.id}</span>
-                  {tag.arranger && <span>arr. {tag.arranger}</span>}
+                  {tag.arranger && <span>arr. {highlight(tag.arranger, query)}</span>}
                   {tag.key && <span>{formatKey(tag.key)}</span>}
                   <span>{tag.downloaded.toLocaleString()} downloads</span>
                 </div>
