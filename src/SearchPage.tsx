@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { searchTags, type Tag, type SearchResult } from './api/tags';
+import { formatKey } from './formatKey';
 
 interface Props {
   initialQuery: string;
@@ -72,7 +73,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                 <div className="tag-meta">
                   <span>#{tag.id}</span>
                   {tag.arranger && <span>arr. {tag.arranger}</span>}
-                  {tag.key && <span>{tag.key}</span>}
+                  {tag.key && <span>{formatKey(tag.key)}</span>}
                   <span>{tag.downloaded.toLocaleString()} downloads</span>
                 </div>
               </li>

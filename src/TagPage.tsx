@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { type Tag } from './api/tags';
 import { getSheetMusic } from './cache/sheetMusic';
+import { formatKey } from './formatKey';
 
 interface Props {
   tag: Tag;
@@ -61,7 +62,7 @@ export default function TagPage({ tag, onBack }: Props) {
       <div className="tag-meta">
         <span>#{tag.id}</span>
         {tag.arranger && <span>arr. {tag.arranger}</span>}
-        {tag.key && <span>{tag.key}</span>}
+        {tag.key && <span>{formatKey(tag.key)}</span>}
         <span>{tag.downloaded.toLocaleString()} downloads</span>
       </div>
 
