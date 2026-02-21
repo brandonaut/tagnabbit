@@ -1,37 +1,22 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import appLogo from '/favicon.svg'
 import PWABadge from './PWABadge.tsx'
+import SearchPage from './SearchPage.tsx'
+import TagPage from './TagPage.tsx'
+import { type Tag } from './api/tags.ts'
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+type View = { name: 'search' } | { name: 'tag'; tag: Tag }
+
+export default function App() {
+  const [view, setView] = useState<View>({ name: 'search' })
 
   return (
     <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={appLogo} className="logo" alt="tagnabbit logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>tagnabbit</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
+      {view.name === 'search'
+        ? <SearchPage onSelectTag={tag => setView({ name: 'tag', tag })} />
+        : <TagPage tag={view.tag} onBack={() => setView({ name: 'search' })} />
+      }
       <PWABadge />
     </>
   )
 }
-
-export default App

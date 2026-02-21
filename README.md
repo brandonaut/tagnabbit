@@ -2,6 +2,10 @@
 
 Search Barbershop Tags Fast — a PWA built with React, TypeScript, and Vite.
 
+## Features
+
+- Fast search for barbershop tags
+
 ## Prerequisites
 
 - [Bun](https://bun.sh/) (used as the package manager and runtime)
