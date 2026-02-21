@@ -1,6 +1,13 @@
-import { useState } from 'react';
-import { searchTags, type Tag, type SearchResult } from './api/tags';
+import { useState, useEffect } from 'react';
+import { searchTags, fetchAllTags, type Tag, type SearchResult } from './api/tags';
 import { formatKey } from './formatKey';
+import {
+  getCachedAllTags,
+  storeAllTags,
+  getTagCacheMeta,
+  searchLocal,
+  type TagCacheMeta,
+} from './cache/tagDatabase';
 
 interface Props {
   initialQuery: string;
@@ -14,8 +21,32 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [localTags, setLocalTags] = useState<Tag[] | null>(null);
+  const [cacheMeta, setCacheMeta] = useState<TagCacheMeta | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ fetched: number; total: number } | null>(null);
+
+  const isLocalMode = localTags !== null;
+
+  // Load local tag database on mount
+  useEffect(() => {
+    Promise.all([getCachedAllTags(), getTagCacheMeta()]).then(([tags, meta]) => {
+      if (tags && tags.length > 0) {
+        setLocalTags(tags);
+        setCacheMeta(meta);
+      }
+    });
+  }, []);
+
+  // Live local search whenever query or local tags change
+  useEffect(() => {
+    if (!localTags) return;
+    setResult(searchLocal(localTags, query));
+  }, [query, localTags]);
+
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
+    if (isLocalMode) return; // search is live in local mode
     const q = query.trim();
     if (!q) return;
     setLoading(true);
@@ -31,9 +62,30 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     }
   }
 
+  async function handleDownloadAll() {
+    setIsDownloading(true);
+    setError(null);
+    setDownloadProgress({ fetched: 0, total: 0 });
+    try {
+      const tags = await fetchAllTags((fetched, total) => {
+        setDownloadProgress({ fetched, total });
+      });
+      await storeAllTags(tags);
+      const meta = await getTagCacheMeta();
+      setLocalTags(tags);
+      setCacheMeta(meta);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Download failed');
+    } finally {
+      setIsDownloading(false);
+      setDownloadProgress(null);
+    }
+  }
+
   return (
     <div className="search-page">
       <h1>tagnabbit</h1>
+
       <form onSubmit={handleSearch} className="search-form">
         <input
           type="search"
@@ -42,19 +94,46 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
           placeholder="Search barbershop tags..."
           className="search-input"
           autoFocus
-          disabled={loading}
+          disabled={loading || isDownloading}
         />
-        <button type="submit" disabled={loading || !query.trim()}>
-          {loading ? 'Searching…' : 'Search'}
-        </button>
+        {!isLocalMode && (
+          <button type="submit" disabled={loading || !query.trim() || isDownloading}>
+            {loading ? 'Searching…' : 'Search'}
+          </button>
+        )}
       </form>
+
+      {isDownloading && downloadProgress && (
+        <p className="download-progress">
+          Downloading…{' '}
+          {downloadProgress.fetched.toLocaleString()}
+          {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
+          {' tags'}
+        </p>
+      )}
+
+      {!isLocalMode && !isDownloading && (
+        <button className="download-all-btn" onClick={handleDownloadAll}>
+          Download all tags for instant offline search
+        </button>
+      )}
+
+      {isLocalMode && cacheMeta && (
+        <p className="local-mode-indicator">
+          {cacheMeta.count.toLocaleString()} tags cached
+          · {new Date(cacheMeta.cachedAt).toLocaleDateString()}
+        </p>
+      )}
 
       {error && <p className="error" role="alert">{error}</p>}
 
-      {result && (
+      {result && result.tags.length > 0 && (
         <>
           <p className="result-count">
-            {result.available.toLocaleString()} tags found, showing {result.count}
+            {isLocalMode
+              ? `${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ''}`
+              : `${result.available.toLocaleString()} tags found, showing ${result.count}`
+            }
           </p>
           <ul className="tag-list">
             {result.tags.map(tag => (
@@ -80,6 +159,10 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             ))}
           </ul>
         </>
+      )}
+
+      {result && result.tags.length === 0 && query.trim() && (
+        <p className="no-results">No tags found for "{query.trim()}".</p>
       )}
     </div>
   );

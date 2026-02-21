@@ -42,6 +42,28 @@
   margin: 0;
 }
 
+.download-all-btn {
+  align-self: flex-start;
+  font-size: 0.875rem;
+}
+
+.download-progress {
+  font-size: 0.875rem;
+  color: #888;
+  margin: 0;
+}
+
+.local-mode-indicator {
+  font-size: 0.8rem;
+  color: #888;
+  margin: 0;
+}
+
+.no-results {
+  color: #888;
+  font-size: 0.9rem;
+}
+
 .error {
   color: #f87171;
   margin: 0;

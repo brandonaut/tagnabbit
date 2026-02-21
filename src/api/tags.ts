@@ -26,19 +26,11 @@ function getText(el: Element, tag: string): string {
   return el.querySelector(tag)?.textContent?.trim() ?? '';
 }
 
-export async function searchTags(query: string): Promise<SearchResult> {
-  const url = proxyUrl(`https://www.barbershoptags.com/api.php?q=${encodeURIComponent(query)}`);
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
-  }
-
-  const xml = await response.text();
+function parseTagsXml(xml: string): SearchResult {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
 
-  const parseError = doc.querySelector('parsererror');
-  if (parseError) {
+  if (doc.querySelector('parsererror')) {
     throw new Error('Invalid response from server');
   }
 
@@ -63,4 +55,43 @@ export async function searchTags(query: string): Promise<SearchResult> {
   }));
 
   return { available, count, tags };
+}
+
+export async function searchTags(query: string): Promise<SearchResult> {
+  const url = proxyUrl(`https://www.barbershoptags.com/api.php?q=${encodeURIComponent(query)}`);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+  return parseTagsXml(await response.text());
+}
+
+const PAGE_SIZE = 500;
+
+export async function fetchAllTags(
+  onProgress: (fetched: number, total: number) => void
+): Promise<Tag[]> {
+  const firstResponse = await fetch(
+    proxyUrl(`https://www.barbershoptags.com/api.php?n=${PAGE_SIZE}&start=1`)
+  );
+  if (!firstResponse.ok) throw new Error(`Request failed: ${firstResponse.status}`);
+
+  const first = parseTagsXml(await firstResponse.text());
+  const total = first.available;
+  const allTags: Tag[] = [...first.tags];
+  onProgress(allTags.length, total);
+
+  let start = PAGE_SIZE + 1;
+  while (allTags.length < total) {
+    const response = await fetch(
+      proxyUrl(`https://www.barbershoptags.com/api.php?n=${PAGE_SIZE}&start=${start}`)
+    );
+    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+
+    const page = parseTagsXml(await response.text());
+    if (page.tags.length === 0) break; // safety valve
+    allTags.push(...page.tags);
+    onProgress(allTags.length, total);
+    start += PAGE_SIZE;
+  }
+
+  return allTags;
 }
