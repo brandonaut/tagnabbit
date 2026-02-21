@@ -1,3 +1,5 @@
+import { proxyUrl } from '../proxyUrl';
+
 export interface Tag {
   id: string;
   title: string;
@@ -25,7 +27,7 @@ function getText(el: Element, tag: string): string {
 }
 
 export async function searchTags(query: string): Promise<SearchResult> {
-  const url = `https://www.barbershoptags.com/api.php?q=${encodeURIComponent(query)}`;
+  const url = proxyUrl(`https://www.barbershoptags.com/api.php?q=${encodeURIComponent(query)}`);
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);

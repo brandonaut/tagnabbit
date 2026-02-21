@@ -118,6 +118,13 @@
   border-radius: 6px;
 }
 
+.sheet-music-image {
+  width: 100%;
+  height: auto;
+  border: 1px solid #3334;
+  border-radius: 6px;
+}
+
 .sheet-music-link {
   font-size: 0.875rem;
 }

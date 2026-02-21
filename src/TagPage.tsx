@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react';
 import { type Tag } from './api/tags';
+import { getSheetMusic } from './cache/sheetMusic';
 
 interface Props {
   tag: Tag;
@@ -6,7 +8,48 @@ interface Props {
 }
 
 export default function TagPage({ tag, onBack }: Props) {
-  const pdfUrl = tag.sheetMusicAltUrl || tag.sheetMusicUrl;
+  const sheetUrl = tag.sheetMusicAltUrl || tag.sheetMusicUrl;
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [mimeType, setMimeType] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sheetUrl) return;
+
+    let cancelled = false;
+    let createdUrl: string | null = null;
+
+    setLoading(true);
+    setError(null);
+    setObjectUrl(null);
+
+    getSheetMusic(sheetUrl)
+      .then(({ objectUrl: url, mimeType: mime }) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+        } else {
+          createdUrl = url;
+          setObjectUrl(url);
+          setMimeType(mime);
+        }
+      })
+      .catch(err => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load sheet music');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+    };
+  }, [sheetUrl]);
+
+  const isImage = mimeType.startsWith('image/');
 
   return (
     <div className="tag-page">
@@ -22,24 +65,43 @@ export default function TagPage({ tag, onBack }: Props) {
         <span>{tag.downloaded.toLocaleString()} downloads</span>
       </div>
 
-      {pdfUrl ? (
+      {!sheetUrl && <p className="no-sheet-music">No sheet music available.</p>}
+
+      {sheetUrl && loading && <p className="loading">Loading sheet music…</p>}
+
+      {sheetUrl && error && (
+        <div>
+          <p className="error" role="alert">{error}</p>
+          <a href={sheetUrl} target="_blank" rel="noopener noreferrer">
+            Open sheet music externally
+          </a>
+        </div>
+      )}
+
+      {objectUrl && (
         <div className="sheet-music-container">
-          <iframe
-            src={pdfUrl}
-            title={`Sheet music for ${tag.title}`}
-            className="sheet-music"
-          />
+          {isImage ? (
+            <img
+              src={objectUrl}
+              alt={`Sheet music for ${tag.title}`}
+              className="sheet-music-image"
+            />
+          ) : (
+            <iframe
+              src={objectUrl}
+              title={`Sheet music for ${tag.title}`}
+              className="sheet-music"
+            />
+          )}
           <a
-            href={pdfUrl}
+            href={sheetUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="sheet-music-link"
           >
-            Open PDF in new tab
+            Open in new tab
           </a>
         </div>
-      ) : (
-        <p className="no-sheet-music">No sheet music available.</p>
       )}
     </div>
   );
