@@ -2,19 +2,33 @@ import { useState } from 'react'
 import PWABadge from './PWABadge.tsx'
 import SearchPage from './SearchPage.tsx'
 import TagPage from './TagPage.tsx'
-import { type Tag } from './api/tags.ts'
+import { type Tag, type SearchResult } from './api/tags.ts'
 import './App.css'
 
-type View = { name: 'search' } | { name: 'tag'; tag: Tag }
+interface SearchState {
+  query: string;
+  result: SearchResult | null;
+}
 
 export default function App() {
-  const [view, setView] = useState<View>({ name: 'search' })
+  const [searchState, setSearchState] = useState<SearchState>({ query: '', result: null })
+  const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
 
   return (
     <>
-      {view.name === 'search'
-        ? <SearchPage onSelectTag={tag => setView({ name: 'tag', tag })} />
-        : <TagPage tag={view.tag} onBack={() => setView({ name: 'search' })} />
+      {selectedTag
+        ? <TagPage
+            tag={selectedTag}
+            onBack={() => setSelectedTag(null)}
+          />
+        : <SearchPage
+            initialQuery={searchState.query}
+            initialResult={searchState.result}
+            onSelectTag={(tag, query, result) => {
+              setSearchState({ query, result })
+              setSelectedTag(tag)
+            }}
+          />
       }
       <PWABadge />
     </>

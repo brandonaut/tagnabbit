@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { searchTags, type Tag, type SearchResult } from './api/tags';
 
 interface Props {
-  onSelectTag: (tag: Tag) => void;
+  initialQuery: string;
+  initialResult: SearchResult | null;
+  onSelectTag: (tag: Tag, query: string, result: SearchResult | null) => void;
 }
 
-export default function SearchPage({ onSelectTag }: Props) {
-  const [query, setQuery] = useState('');
-  const [result, setResult] = useState<SearchResult | null>(null);
+export default function SearchPage({ initialQuery, initialResult, onSelectTag }: Props) {
+  const [query, setQuery] = useState(initialQuery);
+  const [result, setResult] = useState<SearchResult | null>(initialResult);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,10 +60,10 @@ export default function SearchPage({ onSelectTag }: Props) {
               <li
                 key={tag.id}
                 className="tag-item"
-                onClick={() => onSelectTag(tag)}
+                onClick={() => onSelectTag(tag, query, result)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={e => e.key === 'Enter' && onSelectTag(tag)}
+                onKeyDown={e => e.key === 'Enter' && onSelectTag(tag, query, result)}
               >
                 <span className="tag-title">{tag.title}</span>
                 {tag.version && (
