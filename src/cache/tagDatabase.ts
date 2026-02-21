@@ -1,4 +1,4 @@
-import { type Tag, type SearchResult } from '../api/tags';
+import { type Tag } from '../api/tags';
 
 const DB_NAME = 'tagnabbit';
 const DB_VERSION = 1;
@@ -54,23 +54,4 @@ export async function storeAllTags(tags: Tag[]): Promise<void> {
 export async function getTagCacheMeta(): Promise<TagCacheMeta | null> {
   const db = await openDB();
   return (await dbGet<TagCacheMeta>(db, 'meta')) ?? null;
-}
-
-const LOCAL_SEARCH_LIMIT = 100;
-
-export function searchLocal(tags: Tag[], query: string): SearchResult {
-  const q = query.trim().toLowerCase();
-  if (!q) return { available: 0, count: 0, tags: [] };
-
-  const matched = tags.filter(tag =>
-    tag.title.toLowerCase().includes(q) ||
-    tag.altTitle.toLowerCase().includes(q) ||
-    tag.arranger.toLowerCase().includes(q)
-  );
-
-  return {
-    available: matched.length,
-    count: Math.min(matched.length, LOCAL_SEARCH_LIMIT),
-    tags: matched.slice(0, LOCAL_SEARCH_LIMIT),
-  };
 }

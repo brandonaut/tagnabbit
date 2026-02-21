@@ -1,14 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import Fuse from 'fuse.js';
 import { searchTags, fetchAllTags, type Tag, type SearchResult } from './api/tags';
 import { formatKey } from './formatKey';
 import {
   getCachedAllTags,
   storeAllTags,
   getTagCacheMeta,
-  searchLocal,
   type TagCacheMeta,
 } from './cache/tagDatabase';
 
+// Character ranges [start, end] (inclusive) from Fuse match indices
+type MatchRanges = ReadonlyArray<readonly [number, number]>;
+// Per-field match ranges for one tag, keyed by field name
+type FieldMatches = Record<string, MatchRanges>;
+
+const FUSE_LIMIT = 100;
+
+const FUSE_OPTIONS: Fuse.IFuseOptions<Tag> = {
+  keys: [
+    { name: 'title', weight: 3 },
+    { name: 'altTitle', weight: 2 },
+    { name: 'arranger', weight: 2 },
+    { name: 'id', weight: 1 },
+  ],
+  includeMatches: true,
+  threshold: 0.4,
+  minMatchCharLength: 2,
+  ignoreLocation: true,
+};
+
+// Highlight a substring match (used in API mode)
 function highlight(text: string, query: string): React.ReactNode {
   const q = query.trim().toLowerCase();
   if (!q || !text) return text;
@@ -23,6 +44,20 @@ function highlight(text: string, query: string): React.ReactNode {
     parts.push(<mark key={idx}>{text.slice(idx, idx + q.length)}</mark>);
     last = idx + q.length;
     idx = lower.indexOf(q, last);
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
+// Highlight using Fuse character indices (used in local mode)
+function highlightWithIndices(text: string, indices: MatchRanges): React.ReactNode {
+  if (!indices.length) return text;
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const [start, end] of indices) {
+    if (start > last) parts.push(text.slice(last, start));
+    parts.push(<mark key={start}>{text.slice(start, end + 1)}</mark>);
+    last = end + 1;
   }
   if (last < text.length) parts.push(text.slice(last));
   return <>{parts}</>;
@@ -44,7 +79,9 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   const [cacheMeta, setCacheMeta] = useState<TagCacheMeta | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ fetched: number; total: number } | null>(null);
+  const [localMatches, setLocalMatches] = useState<Map<string, FieldMatches>>(new Map());
 
+  const fuseRef = useRef<Fuse<Tag> | null>(null);
   const isLocalMode = localTags !== null;
 
   // Load local tag database on mount
@@ -57,15 +94,48 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     });
   }, []);
 
-  // Live local search whenever query or local tags change
+  // Build Fuse index when local tags are loaded
   useEffect(() => {
-    if (!localTags) return;
-    setResult(searchLocal(localTags, query));
+    if (!localTags) { fuseRef.current = null; return; }
+    fuseRef.current = new Fuse(localTags, FUSE_OPTIONS);
+  }, [localTags]);
+
+  // Run fuzzy search on every query change (or when the index is first built)
+  useEffect(() => {
+    const fuse = fuseRef.current;
+    if (!fuse) return;
+
+    const q = query.trim();
+    if (!q) {
+      setResult(null);
+      setLocalMatches(new Map());
+      return;
+    }
+
+    const all = fuse.search(q);
+    const sliced = all.slice(0, FUSE_LIMIT);
+
+    setResult({
+      available: all.length,
+      count: sliced.length,
+      tags: sliced.map(r => r.item),
+    });
+
+    setLocalMatches(new Map(
+      sliced.map(r => [
+        r.item.id,
+        Object.fromEntries(
+          (r.matches ?? [])
+            .filter(m => m.key)
+            .map(m => [m.key!, m.indices as MatchRanges])
+        ),
+      ])
+    ));
   }, [query, localTags]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (isLocalMode) return; // search is live in local mode
+    if (isLocalMode) return;
     const q = query.trim();
     if (!q) return;
     setLoading(true);
@@ -155,27 +225,35 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             }
           </p>
           <ul className="tag-list">
-            {result.tags.map(tag => (
-              <li
-                key={tag.id}
-                className="tag-item"
-                onClick={() => onSelectTag(tag, query, result)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={e => e.key === 'Enter' && onSelectTag(tag, query, result)}
-              >
-                <span className="tag-title">{highlight(tag.title, query)}</span>
-                {tag.version && (
-                  <span className="tag-version"> — {highlight(tag.version, query)}</span>
-                )}
-                <div className="tag-meta">
-                  <span>#{tag.id}</span>
-                  {tag.arranger && <span>arr. {highlight(tag.arranger, query)}</span>}
-                  {tag.key && <span>{formatKey(tag.key)}</span>}
-                  <span>{tag.downloaded.toLocaleString()} downloads</span>
-                </div>
-              </li>
-            ))}
+            {result.tags.map(tag => {
+              const fm = localMatches.get(tag.id);
+              const hlField = (text: string, field: string) =>
+                fm?.[field]
+                  ? highlightWithIndices(text, fm[field])
+                  : highlight(text, query);
+
+              return (
+                <li
+                  key={tag.id}
+                  className="tag-item"
+                  onClick={() => onSelectTag(tag, query, result)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={e => e.key === 'Enter' && onSelectTag(tag, query, result)}
+                >
+                  <span className="tag-title">{hlField(tag.title, 'title')}</span>
+                  {tag.version && (
+                    <span className="tag-version"> — {hlField(tag.version, 'version')}</span>
+                  )}
+                  <div className="tag-meta">
+                    <span>#{tag.id}</span>
+                    {tag.arranger && <span>arr. {hlField(tag.arranger, 'arranger')}</span>}
+                    {tag.key && <span>{formatKey(tag.key)}</span>}
+                    <span>{tag.downloaded.toLocaleString()} downloads</span>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
