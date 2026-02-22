@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import Fuse from 'fuse.js';
-import { searchTags, fetchAllTags, type Tag, type SearchResult } from './api/tags';
+import { searchTags, fetchAllTags, getTagCount, type Tag, type SearchResult } from './api/tags';
 import { formatKey } from './formatKey';
 import {
   getCachedAllTags,
   storeAllTags,
   getTagCacheMeta,
+  touchTagCache,
   type TagCacheMeta,
 } from './cache/tagDatabase';
 import SettingsDrawer from './SettingsDrawer';
@@ -17,6 +18,13 @@ type FieldMatches = Record<string, MatchRanges>;
 
 const FUSE_LIMIT = 100;
 const SURPRISE_COUNT = 7;
+
+const STALE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const JITTER_MS = Math.random() * 24 * 60 * 60 * 1000; // 0–24h spread per session
+
+function isCacheStale(cachedAt: string): boolean {
+  return Date.now() - new Date(cachedAt).getTime() > STALE_MS + JITTER_MS;
+}
 
 const FUSE_OPTIONS: Fuse.IFuseOptions<Tag> = {
   keys: [
@@ -81,6 +89,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   const [cacheMeta, setCacheMeta] = useState<TagCacheMeta | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ fetched: number; total: number } | null>(null);
+  const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const [localMatches, setLocalMatches] = useState<Map<string, FieldMatches>>(new Map());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [filters, setFilters] = useState({ type: '', parts: '', learningTracks: false });
@@ -96,14 +105,46 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   const fuseRef = useRef<Fuse<Tag> | null>(null);
   const isLocalMode = localTags !== null;
 
-  // Load local tag database on mount
+  // Load local tag database on mount, then check staleness in background
   useEffect(() => {
-    Promise.all([getCachedAllTags(), getTagCacheMeta()]).then(([tags, meta]) => {
-      if (tags && tags.length > 0) {
-        setLocalTags(tags);
-        setCacheMeta(meta);
+    let cancelled = false;
+
+    (async () => {
+      const [tags, meta] = await Promise.all([getCachedAllTags(), getTagCacheMeta()]);
+      if (cancelled || !tags || tags.length === 0) return;
+
+      setLocalTags(tags);
+      setCacheMeta(meta);
+
+      if (!meta || !isCacheStale(meta.cachedAt) || isDownloading) return;
+
+      setIsBackgroundRefreshing(true);
+      try {
+        const liveCount = await getTagCount();
+        if (cancelled) return;
+
+        if (liveCount === meta.count) {
+          // Catalog unchanged — just reset the staleness timer
+          const newMeta = await touchTagCache();
+          if (!cancelled) setCacheMeta(newMeta);
+        } else {
+          // New tags available — re-download silently
+          const newTags = await fetchAllTags(() => {});
+          if (cancelled) return;
+          await storeAllTags(newTags);
+          const newMeta = await getTagCacheMeta();
+          if (cancelled) return;
+          setLocalTags(newTags);
+          setCacheMeta(newMeta);
+        }
+      } catch {
+        // Best-effort; user can always refresh manually
+      } finally {
+        if (!cancelled) setIsBackgroundRefreshing(false);
       }
-    });
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   // Build Fuse index when local tags are loaded
@@ -342,6 +383,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         cacheMeta={cacheMeta}
         isDownloading={isDownloading}
         downloadProgress={downloadProgress}
+        isBackgroundRefreshing={isBackgroundRefreshing}
         onRefreshCache={handleDownloadAll}
       />
     </div>

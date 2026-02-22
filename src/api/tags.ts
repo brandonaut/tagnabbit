@@ -75,6 +75,13 @@ export async function searchTags(query: string): Promise<SearchResult> {
 
 const PAGE_SIZE = 500;
 
+export async function getTagCount(): Promise<number> {
+  const url = proxyUrl('https://www.barbershoptags.com/api.php?n=1&start=1');
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+  return parseTagsXml(await response.text()).available;
+}
+
 export async function fetchAllTags(
   onProgress: (fetched: number, total: number) => void
 ): Promise<Tag[]> {

@@ -55,3 +55,13 @@ export async function getTagCacheMeta(): Promise<TagCacheMeta | null> {
   const db = await openDB();
   return (await dbGet<TagCacheMeta>(db, 'meta')) ?? null;
 }
+
+// Update cachedAt without re-downloading tags (used after a successful count-match check)
+export async function touchTagCache(): Promise<TagCacheMeta | null> {
+  const db = await openDB();
+  const existing = await dbGet<TagCacheMeta>(db, 'meta');
+  if (!existing) return null;
+  const meta: TagCacheMeta = { ...existing, cachedAt: new Date().toISOString() };
+  await dbPutAll(db, [['meta', meta]]);
+  return meta;
+}

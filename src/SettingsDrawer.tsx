@@ -10,6 +10,7 @@ interface Props {
   cacheMeta: TagCacheMeta | null;
   isDownloading: boolean;
   downloadProgress: { fetched: number; total: number } | null;
+  isBackgroundRefreshing: boolean;
   onRefreshCache: () => void;
 }
 
@@ -19,6 +20,7 @@ export default function SettingsDrawer({
   cacheMeta,
   isDownloading,
   downloadProgress,
+  isBackgroundRefreshing,
   onRefreshCache,
 }: Props) {
   useEffect(() => {
@@ -59,7 +61,10 @@ export default function SettingsDrawer({
               {' tags'}
             </p>
           )}
-          <button onClick={onRefreshCache} disabled={isDownloading}>
+          {isBackgroundRefreshing && (
+            <p className="cache-info">Checking for updates…</p>
+          )}
+          <button onClick={onRefreshCache} disabled={isDownloading || isBackgroundRefreshing}>
             {isDownloading ? 'Downloading…' : cacheMeta ? 'Refresh cache' : 'Download all tags'}
           </button>
         </section>
