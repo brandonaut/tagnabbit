@@ -322,16 +322,64 @@ mark {
   color: #888;
 }
 
-.tone-btn {
+.pitch-pipe {
   position: absolute;
   bottom: 0.75rem;
   left: 0.75rem;
+  opacity: 0.9;
+}
+
+.pitch-pipe-controls {
+  display: flex;
+}
+
+.tone-btn {
   font-size: 1rem;
   user-select: none;
-  opacity: 0.85;
+  border-radius: 6px 0 0 6px;
+  border-right: none;
 }
 
 .tone-btn:active {
+  background: #646cff;
+  border-color: #646cff;
+  color: #fff;
+}
+
+.pitch-picker-btn {
+  padding: 0.6em 0.6em;
+  border-radius: 0 6px 6px 0;
+  line-height: 1;
+}
+
+.pitch-picker {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.25rem;
+  background: #1a1a1a;
+  border: 1px solid #3334;
+  border-radius: 8px;
+  padding: 0.5rem;
+  z-index: 10;
+}
+
+@media (prefers-color-scheme: light) {
+  .pitch-picker {
+    background: #f9f9f9;
+  }
+}
+
+.pitch-note {
+  font-size: 0.85rem;
+  padding: 0.35em 0.5em;
+  min-width: 2.75rem;
+  text-align: center;
+}
+
+.pitch-note.selected {
   background: #646cff;
   border-color: #646cff;
   color: #fff;

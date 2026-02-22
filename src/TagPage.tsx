@@ -1,22 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { type Tag } from './api/tags';
 import { getSheetMusic } from './cache/sheetMusic';
 import { formatKey } from './formatKey';
-
-const NOTE_FREQUENCIES: Record<string, number> = {
-  'C': 261.63,
-  'C#': 277.18, 'Db': 277.18,
-  'D': 293.66,
-  'D#': 311.13, 'Eb': 311.13,
-  'E': 329.63,
-  'F': 349.23,
-  'F#': 369.99, 'Gb': 369.99,
-  'G': 392.00,
-  'G#': 415.30, 'Ab': 415.30,
-  'A': 440.00,
-  'A#': 466.16, 'Bb': 466.16,
-  'B': 493.88,
-};
+import PitchPipe from './PitchPipe';
 
 interface Props {
   tag: Tag;
@@ -29,43 +15,6 @@ export default function TagPage({ tag, onBack }: Props) {
   const [mimeType, setMimeType] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const audioRef = useRef<{ ctx: AudioContext; osc: OscillatorNode; gain: GainNode } | null>(null);
-
-  useEffect(() => {
-    return () => {
-      const audio = audioRef.current;
-      if (audio) {
-        audio.osc.stop();
-        audio.ctx.close();
-        audioRef.current = null;
-      }
-    };
-  }, []);
-
-  function startTone() {
-    if (audioRef.current || !tag.key) return;
-    const freq = NOTE_FREQUENCIES[formatKey(tag.key)];
-    if (!freq) return;
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'square';
-    osc.frequency.value = freq;
-    gain.gain.value = 0.15;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    audioRef.current = { ctx, osc, gain };
-  }
-
-  function stopTone() {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.osc.stop();
-    audio.ctx.close();
-    audioRef.current = null;
-  }
 
   useEffect(() => {
     if (!sheetUrl) return;
@@ -147,19 +96,7 @@ export default function TagPage({ tag, onBack }: Props) {
                 className="sheet-music"
               />
             )}
-            {tag.key && (
-              <button
-                className="tone-btn"
-                onMouseDown={startTone}
-                onMouseUp={stopTone}
-                onMouseLeave={stopTone}
-                onTouchStart={startTone}
-                onTouchEnd={stopTone}
-                onTouchCancel={stopTone}
-              >
-                {formatKey(tag.key)}
-              </button>
-            )}
+            {tag.key && <PitchPipe defaultNote={formatKey(tag.key)} />}
           </div>
           <a
             href={sheetUrl}
