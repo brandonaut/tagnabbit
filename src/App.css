@@ -12,8 +12,22 @@
   gap: 1rem;
 }
 
-.search-page h1 {
-  margin: 0 0 0.5rem;
+.search-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.search-header h1 {
+  margin: 0;
+}
+
+.hamburger-btn {
+  font-size: 1.5rem;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border-color: transparent;
+  line-height: 1;
 }
 
 .search-form {
@@ -137,6 +151,78 @@ mark {
 
 .tag-downloads {
   margin-left: auto;
+}
+
+/* Settings drawer */
+
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(320px, 85vw);
+  background: #1a1a1a;
+  z-index: 101;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  overflow-y: auto;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: light) {
+  .drawer {
+    background: #f9f9f9;
+  }
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.drawer-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.drawer-close {
+  font-size: 1rem;
+  padding: 0.25rem 0.5rem;
+  background: transparent;
+  border-color: transparent;
+  line-height: 1;
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.drawer-section h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #888;
+}
+
+.cache-info,
+.about-info {
+  font-size: 0.875rem;
+  color: #aaa;
+  margin: 0;
+  line-height: 1.6;
 }
 
 /* Tag detail page */

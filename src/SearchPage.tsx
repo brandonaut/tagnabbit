@@ -8,6 +8,7 @@ import {
   getTagCacheMeta,
   type TagCacheMeta,
 } from './cache/tagDatabase';
+import SettingsDrawer from './SettingsDrawer';
 
 // Character ranges [start, end] (inclusive) from Fuse match indices
 type MatchRanges = ReadonlyArray<readonly [number, number]>;
@@ -80,6 +81,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ fetched: number; total: number } | null>(null);
   const [localMatches, setLocalMatches] = useState<Map<string, FieldMatches>>(new Map());
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const fuseRef = useRef<Fuse<Tag> | null>(null);
   const isLocalMode = localTags !== null;
@@ -173,7 +175,16 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
 
   return (
     <div className="search-page">
-      <h1>tagnabbit</h1>
+      <div className="search-header">
+        <h1>tagnabbit</h1>
+        <button
+          className="hamburger-btn"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Open settings"
+        >
+          ☰
+        </button>
+      </div>
 
       <form onSubmit={handleSearch} className="search-form">
         <input
@@ -205,13 +216,6 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         <button className="download-all-btn" onClick={handleDownloadAll}>
           Download all tags for instant offline search
         </button>
-      )}
-
-      {isLocalMode && cacheMeta && (
-        <p className="local-mode-indicator">
-          {cacheMeta.count.toLocaleString()} tags cached
-          · {new Date(cacheMeta.cachedAt).toLocaleDateString()}
-        </p>
       )}
 
       {error && <p className="error" role="alert">{error}</p>}
@@ -266,6 +270,15 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       {result && result.tags.length === 0 && query.trim() && (
         <p className="no-results">No tags found for "{query.trim()}".</p>
       )}
+
+      <SettingsDrawer
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        cacheMeta={cacheMeta}
+        isDownloading={isDownloading}
+        downloadProgress={downloadProgress}
+        onRefreshCache={handleDownloadAll}
+      />
     </div>
   );
 }
