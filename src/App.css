@@ -269,3 +269,15 @@ mark {
 .no-sheet-music {
   color: #888;
 }
+
+.tone-btn {
+  align-self: flex-start;
+  font-size: 1rem;
+  user-select: none;
+}
+
+.tone-btn:active {
+  background: #646cff;
+  border-color: #646cff;
+  color: #fff;
+}
