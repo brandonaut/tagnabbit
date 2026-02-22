@@ -211,7 +211,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   return (
     <div className="search-page">
       <div className="search-header">
-        <h1>tagnabbit</h1>
+        <h1>Tagnabbit</h1>
         <button
           className="hamburger-btn"
           onClick={() => setSettingsOpen(true)}
