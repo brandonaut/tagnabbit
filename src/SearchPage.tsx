@@ -18,10 +18,10 @@ const FUSE_LIMIT = 100;
 
 const FUSE_OPTIONS: Fuse.IFuseOptions<Tag> = {
   keys: [
+    { name: 'id', weight: 3 },
     { name: 'title', weight: 3 },
     { name: 'altTitle', weight: 2 },
-    { name: 'arranger', weight: 2 },
-    { name: 'id', weight: 1 },
+    { name: 'arranger', weight: 1 },
   ],
   includeMatches: true,
   threshold: 0.4,
