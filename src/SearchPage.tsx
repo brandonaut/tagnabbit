@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import Fuse from 'fuse.js';
 import { searchTags, fetchAllTags, type Tag, type SearchResult } from './api/tags';
 import { formatKey } from './formatKey';
@@ -82,6 +82,15 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   const [downloadProgress, setDownloadProgress] = useState<{ fetched: number; total: number } | null>(null);
   const [localMatches, setLocalMatches] = useState<Map<string, FieldMatches>>(new Map());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [filters, setFilters] = useState({ type: '', parts: '', learningTracks: false });
+
+  const typeOptions = useMemo(() =>
+    localTags ? [...new Set(localTags.map(t => t.type).filter(Boolean))].sort() : []
+  , [localTags]);
+
+  const partsOptions = useMemo(() =>
+    localTags ? [...new Set(localTags.map(t => t.parts).filter(Boolean))].sort((a, b) => +a - +b) : []
+  , [localTags]);
 
   const fuseRef = useRef<Fuse<Tag> | null>(null);
   const isLocalMode = localTags !== null;
@@ -115,10 +124,17 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     }
 
     const all = fuse.search(q);
-    const sliced = all.slice(0, FUSE_LIMIT);
+    const filtered = all.filter(r => {
+      const tag = r.item;
+      if (filters.type && tag.type !== filters.type) return false;
+      if (filters.parts && tag.parts !== filters.parts) return false;
+      if (filters.learningTracks && !tag.hasLearningTracks) return false;
+      return true;
+    });
+    const sliced = filtered.slice(0, FUSE_LIMIT);
 
     setResult({
-      available: all.length,
+      available: filtered.length,
       count: sliced.length,
       tags: sliced.map(r => r.item),
     });
@@ -133,7 +149,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         ),
       ])
     ));
-  }, [query, localTags]);
+  }, [query, localTags, filters]);
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -210,6 +226,33 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
           {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
           {' tags'}
         </p>
+      )}
+
+      {isLocalMode && (
+        <div className="filters">
+          <select
+            value={filters.type}
+            onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select
+            value={filters.parts}
+            onChange={e => setFilters(f => ({ ...f, parts: e.target.value }))}
+          >
+            <option value="">All parts</option>
+            {partsOptions.map(p => <option key={p} value={p}>{p} parts</option>)}
+          </select>
+          <label className="filter-checkbox">
+            <input
+              type="checkbox"
+              checked={filters.learningTracks}
+              onChange={e => setFilters(f => ({ ...f, learningTracks: e.target.checked }))}
+            />
+            Learning tracks
+          </label>
+        </div>
       )}
 
       {!isLocalMode && !isDownloading && (

@@ -14,6 +14,7 @@ export interface Tag {
   ratingCount: string;
   sheetMusicUrl: string;
   sheetMusicAltUrl: string;
+  hasLearningTracks: boolean;
 }
 
 export interface SearchResult {
@@ -52,6 +53,14 @@ function parseTagsXml(xml: string): SearchResult {
     ratingCount: getText(el, 'RatingCount'),
     sheetMusicUrl: getText(el, 'SheetMusic'),
     sheetMusicAltUrl: getText(el, 'SheetMusicAlt'),
+    hasLearningTracks: !!(
+      getText(el, 'AllParts') ||
+      getText(el, 'Bass') ||
+      getText(el, 'Bari') ||
+      getText(el, 'Lead') ||
+      getText(el, 'Tenor') ||
+      getText(el, 'TeachVid')
+    ),
   }));
 
   return { available, count, tags };

@@ -56,6 +56,40 @@
   margin: 0;
 }
 
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.filters select {
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #555;
+  border-radius: 6px;
+  background-color: #1a1a1a;
+  color: rgba(255, 255, 255, 0.87);
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: light) {
+  .filters select {
+    background-color: #f9f9f9;
+    color: #213547;
+  }
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  color: #aaa;
+}
+
 .download-all-btn {
   align-self: flex-start;
   font-size: 0.875rem;
