@@ -1,12 +1,14 @@
 #root {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem 1rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Search page */
 
 .search-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -260,6 +262,7 @@ mark {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 1rem 1rem 5rem;
 }
 
 .tag-header {
@@ -379,6 +382,8 @@ mark {
 
 .sheet-music-wrapper {
   position: relative;
+  margin-left: -1rem;
+  margin-right: -1rem;
 }
 
 .sheet-music {
