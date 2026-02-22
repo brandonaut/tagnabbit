@@ -96,7 +96,7 @@ export default function TagPage({ tag, onBack }: Props) {
                 className="sheet-music"
               />
             )}
-            {tag.key && <PitchPipe defaultNote={formatKey(tag.key)} />}
+            <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : 'C'} />
           </div>
           <a
             href={sheetUrl}
