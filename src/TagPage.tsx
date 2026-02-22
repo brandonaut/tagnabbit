@@ -108,13 +108,14 @@ export default function TagPage({ tag, onBack }: Props) {
     <div className="tag-page">
       <button className="back-btn" onClick={onBack}>← Back</button>
 
-      <h1>{tag.title}</h1>
+      <div className="tag-title-row">
+        <h1>{tag.title}</h1>
+        <span className="tag-id">#{tag.id}</span>
+      </div>
       {tag.version && <p className="tag-version">{tag.version}</p>}
 
       <div className="tag-meta">
-        <span>#{tag.id}</span>
-        {tag.arranger && <span>arr. {tag.arranger}</span>}
-        <span>{tag.downloaded.toLocaleString()} downloads</span>
+        {tag.arranger && <span>{tag.arranger}</span>}
       </div>
 
       {tag.key && (

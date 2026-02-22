@@ -188,10 +188,6 @@ mark {
   color: #888;
 }
 
-.tag-downloads {
-  margin-left: auto;
-}
-
 /* Settings drawer */
 
 .drawer-overlay {
@@ -277,8 +273,21 @@ mark {
   font-size: 0.9rem;
 }
 
+.tag-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .tag-page h1 {
   margin: 0;
+}
+
+.tag-id {
+  font-size: 0.85rem;
+  color: #888;
+  white-space: nowrap;
 }
 
 .sheet-music-container {
