@@ -2,18 +2,31 @@ import { proxyUrl } from '../proxyUrl';
 
 const CACHE_NAME = 'tagnabbit-sheet-music';
 const LRU_KEY = 'sheet-music-lru';
-const MAX_ENTRIES = 15;
+const MAX_BYTES = 50 * 1024 * 1024; // 50MB
 
-function getLRU(): string[] {
+interface LRUEntry {
+  url: string;
+  size: number;
+  cachedAt: string;
+}
+
+function getLRU(): LRUEntry[] {
   try {
-    return JSON.parse(localStorage.getItem(LRU_KEY) ?? '[]');
+    const raw = JSON.parse(localStorage.getItem(LRU_KEY) ?? '[]');
+    // Migrate from old string[] format — clear tracking and start fresh.
+    // Orphaned Cache API entries are harmless; they'll be re-tracked on next access.
+    if (raw.length > 0 && typeof raw[0] === 'string') {
+      localStorage.removeItem(LRU_KEY);
+      return [];
+    }
+    return raw as LRUEntry[];
   } catch {
     return [];
   }
 }
 
-function saveLRU(urls: string[]): void {
-  localStorage.setItem(LRU_KEY, JSON.stringify(urls));
+function saveLRU(entries: LRUEntry[]): void {
+  localStorage.setItem(LRU_KEY, JSON.stringify(entries));
 }
 
 export interface SheetMusicData {
@@ -27,32 +40,38 @@ export async function getSheetMusic(url: string): Promise<SheetMusicData> {
 
   const cached = await cache.match(url);
   if (cached) {
-    // Promote to most-recently-used
-    lru = [url, ...lru.filter(u => u !== url)];
-    saveLRU(lru);
     const blob = await cached.blob();
+    const existing = lru.find(e => e.url === url);
+    // If size wasn't tracked (migrated entry), measure it now
+    const size = existing?.size ?? blob.size;
+    lru = [
+      { url, size, cachedAt: existing?.cachedAt ?? new Date().toISOString() },
+      ...lru.filter(e => e.url !== url),
+    ];
+    saveLRU(lru);
     return { objectUrl: URL.createObjectURL(blob), mimeType: blob.type };
   }
 
-  // Fetch fresh copy (proxy in dev to avoid CORS)
   const response = await fetch(proxyUrl(url));
   if (!response.ok) {
     throw new Error(`Failed to fetch sheet music: ${response.status}`);
   }
 
-  // Evict least-recently-used entries until under the limit
-  lru = lru.filter(u => u !== url);
-  while (lru.length >= MAX_ENTRIES) {
+  const blob = await response.blob();
+  const size = blob.size;
+
+  // Evict least-recently-used entries until there's room for the new entry
+  lru = lru.filter(e => e.url !== url);
+  let totalSize = lru.reduce((sum, e) => sum + e.size, 0);
+  while (lru.length > 0 && totalSize + size > MAX_BYTES) {
     const evicted = lru.pop()!;
-    await cache.delete(evicted);
+    await cache.delete(evicted.url);
+    totalSize -= evicted.size;
   }
 
-  // Store response in cache (clone so we can still read the body)
-  await cache.put(url, response.clone());
-
-  lru = [url, ...lru];
+  await cache.put(url, new Response(blob, { headers: { 'Content-Type': blob.type } }));
+  lru = [{ url, size, cachedAt: new Date().toISOString() }, ...lru];
   saveLRU(lru);
 
-  const blob = await response.blob();
   return { objectUrl: URL.createObjectURL(blob), mimeType: blob.type };
 }
