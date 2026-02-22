@@ -241,15 +241,20 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                   tabIndex={0}
                   onKeyDown={e => e.key === 'Enter' && onSelectTag(tag, query, result)}
                 >
-                  <span className="tag-title">{hlField(tag.title, 'title')}</span>
-                  {tag.version && (
-                    <span className="tag-version"> — {hlField(tag.version, 'version')}</span>
-                  )}
+                  <div className="tag-title-line">
+                    <div>
+                      <span className="tag-title">{hlField(tag.title, 'title')}</span>
+                      {tag.altTitle && (
+                        <span className="tag-alt-title"> — {hlField(tag.altTitle, 'altTitle')}</span>
+                      )}
+                    </div>
+                    <span className="tag-id">#{hlField(tag.id, 'id')}</span>
+                  </div>
                   <div className="tag-meta">
-                    <span>#{tag.id}</span>
-                    {tag.arranger && <span>arr. {hlField(tag.arranger, 'arranger')}</span>}
+                    {tag.arranger && <span>{hlField(tag.arranger, 'arranger')}</span>}
                     {tag.key && <span>{formatKey(tag.key)}</span>}
-                    <span>{tag.downloaded.toLocaleString()} downloads</span>
+                    {tag.parts && <span>{tag.parts} parts</span>}
+                    <span className="tag-downloads">{tag.downloaded.toLocaleString()} downloads</span>
                   </div>
                 </li>
               );

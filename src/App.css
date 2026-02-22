@@ -99,8 +99,26 @@ mark {
   outline: 2px solid #646cff;
 }
 
+.tag-title-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
 .tag-title {
   font-weight: 600;
+}
+
+.tag-id {
+  font-size: 0.8rem;
+  color: #888;
+  white-space: nowrap;
+}
+
+.tag-alt-title {
+  color: #aaa;
+  font-size: 0.9em;
 }
 
 .tag-version {
@@ -115,6 +133,10 @@ mark {
   margin-top: 0.35rem;
   font-size: 0.8rem;
   color: #888;
+}
+
+.tag-downloads {
+  margin-left: auto;
 }
 
 /* Tag detail page */
