@@ -118,20 +118,6 @@ export default function TagPage({ tag, onBack }: Props) {
         {tag.arranger && <span>{tag.arranger}</span>}
       </div>
 
-      {tag.key && (
-        <button
-          className="tone-btn"
-          onMouseDown={startTone}
-          onMouseUp={stopTone}
-          onMouseLeave={stopTone}
-          onTouchStart={startTone}
-          onTouchEnd={stopTone}
-          onTouchCancel={stopTone}
-        >
-          ♪ {formatKey(tag.key)}
-        </button>
-      )}
-
       {!sheetUrl && <p className="no-sheet-music">No sheet music available.</p>}
 
       {sheetUrl && loading && <p className="loading">Loading sheet music…</p>}
@@ -147,19 +133,34 @@ export default function TagPage({ tag, onBack }: Props) {
 
       {objectUrl && (
         <div className="sheet-music-container">
-          {isImage ? (
-            <img
-              src={objectUrl}
-              alt={`Sheet music for ${tag.title}`}
-              className="sheet-music-image"
-            />
-          ) : (
-            <iframe
-              src={objectUrl}
-              title={`Sheet music for ${tag.title}`}
-              className="sheet-music"
-            />
-          )}
+          <div className="sheet-music-wrapper">
+            {isImage ? (
+              <img
+                src={objectUrl}
+                alt={`Sheet music for ${tag.title}`}
+                className="sheet-music-image"
+              />
+            ) : (
+              <iframe
+                src={objectUrl}
+                title={`Sheet music for ${tag.title}`}
+                className="sheet-music"
+              />
+            )}
+            {tag.key && (
+              <button
+                className="tone-btn"
+                onMouseDown={startTone}
+                onMouseUp={stopTone}
+                onMouseLeave={stopTone}
+                onTouchStart={startTone}
+                onTouchEnd={stopTone}
+                onTouchCancel={stopTone}
+              >
+                {formatKey(tag.key)}
+              </button>
+            )}
+          </div>
           <a
             href={sheetUrl}
             target="_blank"
