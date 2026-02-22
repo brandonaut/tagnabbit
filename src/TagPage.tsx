@@ -24,7 +24,7 @@ interface Props {
 }
 
 export default function TagPage({ tag, onBack }: Props) {
-  const sheetUrl = tag.sheetMusicAltUrl || tag.sheetMusicUrl;
+  const sheetUrl = tag.sheetMusicUrl || tag.sheetMusicAltUrl;
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [mimeType, setMimeType] = useState<string>('');
   const [loading, setLoading] = useState(false);

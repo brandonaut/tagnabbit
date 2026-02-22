@@ -90,6 +90,11 @@
   color: #aaa;
 }
 
+.surprise-btn {
+  margin-left: auto;
+  font-size: 0.875rem;
+}
+
 .download-all-btn {
   align-self: flex-start;
   font-size: 0.875rem;

@@ -16,6 +16,7 @@ type MatchRanges = ReadonlyArray<readonly [number, number]>;
 type FieldMatches = Record<string, MatchRanges>;
 
 const FUSE_LIMIT = 100;
+const SURPRISE_COUNT = 7;
 
 const FUSE_OPTIONS: Fuse.IFuseOptions<Tag> = {
   keys: [
@@ -86,11 +87,11 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
 
   const typeOptions = useMemo(() =>
     localTags ? [...new Set(localTags.map(t => t.type).filter(Boolean))].sort() : []
-  , [localTags]);
+    , [localTags]);
 
   const partsOptions = useMemo(() =>
     localTags ? [...new Set(localTags.map(t => t.parts).filter(Boolean))].sort((a, b) => +a - +b) : []
-  , [localTags]);
+    , [localTags]);
 
   const fuseRef = useRef<Fuse<Tag> | null>(null);
   const isLocalMode = localTags !== null;
@@ -189,6 +190,24 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     }
   }
 
+  function handleSurpriseMe() {
+    if (!localTags) return;
+    const pool = localTags.filter(tag => {
+      if (filters.type && tag.type !== filters.type) return false;
+      if (filters.parts && tag.parts !== filters.parts) return false;
+      if (filters.learningTracks && !tag.hasLearningTracks) return false;
+      return true;
+    });
+    const copy = [...pool];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    const sampled = copy.slice(0, SURPRISE_COUNT);
+    setResult({ available: pool.length, count: sampled.length, tags: sampled });
+    setLocalMatches(new Map());
+  }
+
   return (
     <div className="search-page">
       <div className="search-header">
@@ -252,6 +271,9 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             />
             Learning tracks
           </label>
+          <button className="surprise-btn" onClick={handleSurpriseMe}>
+            Surprise Me!
+          </button>
         </div>
       )}
 
