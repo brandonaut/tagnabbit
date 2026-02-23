@@ -11,6 +11,11 @@ const DEGREE_NAMES = [
   '\u{266D}5', '5th', '\u{266D}6', '6th', '\u{266D}7', '7th',
 ];
 
+// How many cents each scale degree sits above its equal-tempered position in 5-limit JI.
+// Ratios: 1/1, 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8
+// e.g. the major 3rd (5/4) is 386¢, which is 14¢ BELOW the ET major 3rd (400¢) → -13.7
+const JI_OFFSETS = [0, 11.7, 3.9, 15.6, -13.7, -2.0, -9.8, 2.0, 13.7, -15.6, 17.6, -11.7];
+
 function autoCorrelate(buf: Float32Array, sampleRate: number): number {
   const SIZE = buf.length;
 
@@ -170,6 +175,15 @@ export default function Tuner({ tagKey }: Props) {
 
           const result = freqToNote(smoothedFreqRef.current);
 
+          // Shift cents relative to the JI target for this scale degree
+          const keyNorm = ENHARMONIC[tagKey] ?? tagKey;
+          const keyIdx = NOTE_NAMES.indexOf(keyNorm);
+          const noteIdx = NOTE_NAMES.indexOf(result.note);
+          const degreeIdx = keyIdx >= 0 && noteIdx >= 0 ? (noteIdx - keyIdx + 12) % 12 : -1;
+          const jiCents = degreeIdx >= 0
+            ? Math.round(result.cents - JI_OFFSETS[degreeIdx])
+            : result.cents;
+
           // Require 2 consecutive frames on the same note before updating name
           if (result.note !== pendingNoteRef.current) {
             pendingNoteRef.current = result.note;
@@ -181,7 +195,7 @@ export default function Tuner({ tagKey }: Props) {
           setPitch(prev => ({
             note: pendingFramesRef.current >= 2 ? result.note : (prev?.note ?? result.note),
             octave: pendingFramesRef.current >= 2 ? result.octave : (prev?.octave ?? result.octave),
-            cents: result.cents,
+            cents: jiCents,
           }));
         } else if (!silenceTimerRef.current) {
           silenceTimerRef.current = setTimeout(() => {
