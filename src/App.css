@@ -470,3 +470,117 @@ mark {
   border-color: #646cff;
   color: #fff;
 }
+
+/* Tuner */
+
+.tuner {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 0.75rem;
+  opacity: 0.9;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.tuner-btn {
+  font-size: 1rem;
+  padding: 0.45em 0.65em;
+  user-select: none;
+}
+
+.tuner-btn.active {
+  background: #646cff;
+  border-color: #646cff;
+  color: #fff;
+}
+
+.tuner-panel {
+  background: #1a1a1a;
+  border: 1px solid #3334;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  min-width: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  z-index: 10;
+}
+
+@media (prefers-color-scheme: light) {
+  .tuner-panel {
+    background: #f9f9f9;
+  }
+}
+
+.tuner-note {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.tuner-octave {
+  font-size: 1rem;
+  font-weight: 400;
+  vertical-align: super;
+  opacity: 0.6;
+}
+
+.tuner-meter {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background: #3334;
+  border-radius: 2px;
+  margin: 0.2rem 0;
+  overflow: visible;
+}
+
+.tuner-meter::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - 10%);
+  width: 20%;
+  height: 100%;
+  background: rgba(74, 222, 128, 0.2);
+  border-radius: 1px;
+}
+
+.tuner-needle {
+  position: absolute;
+  top: -4px;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  transform: translateX(-50%);
+  transition: left 0.08s ease-out, background-color 0.15s;
+}
+
+.tuner-cents {
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5em;
+  text-align: center;
+}
+
+.tuner-degree {
+  font-size: 0.75rem;
+  color: #888;
+}
+
+.tuner-listening {
+  font-size: 0.8rem;
+  color: #888;
+  padding: 0.4rem 0;
+}
+
+.tuner-error-float {
+  font-size: 0.75rem;
+  color: #f87171;
+  text-align: right;
+  max-width: 10rem;
+}

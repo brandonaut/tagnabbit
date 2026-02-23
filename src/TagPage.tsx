@@ -3,6 +3,7 @@ import { type Tag } from './api/tags';
 import { getSheetMusic } from './cache/sheetMusic';
 import { formatKey } from './formatKey';
 import PitchPipe from './PitchPipe';
+import Tuner from './Tuner';
 
 interface Props {
   tag: Tag;
@@ -116,6 +117,7 @@ export default function TagPage({ tag, onBack }: Props) {
               />
             )}
             <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : 'C'} />
+            <Tuner tagKey={tag.key ? formatKey(tag.key) : 'C'} />
           </div>
           <a
             href={sheetUrl}
