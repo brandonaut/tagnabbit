@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import Fuse from 'fuse.js';
+import Fuse, { type IFuseOptions } from 'fuse.js';
 import { searchTags, fetchAllTags, getTagCount, type Tag, type SearchResult } from './api/tags';
 import { formatKey } from './formatKey';
 import {
@@ -26,7 +26,7 @@ function isCacheStale(cachedAt: string): boolean {
   return Date.now() - new Date(cachedAt).getTime() > STALE_MS + JITTER_MS;
 }
 
-const FUSE_OPTIONS: Fuse.IFuseOptions<Tag> = {
+const FUSE_OPTIONS: IFuseOptions<Tag> = {
   keys: [
     { name: 'id', weight: 3 },
     { name: 'title', weight: 3 },

@@ -89,7 +89,7 @@ export default function Tuner({ tagKey }: Props) {
     ctx: AudioContext;
     analyser: AnalyserNode;
     stream: MediaStream;
-    buffer: Float32Array;
+    buffer: Float32Array<ArrayBuffer>;
   } | null>(null);
   const animRef = useRef<number>(0);
   const lastTickRef = useRef<number>(0);
