@@ -29,6 +29,22 @@ export default defineConfig({
       theme_color: '#ffffff',
       background_color: '#ffffff',
       display: 'standalone',
+      screenshots: [
+        {
+          src: 'screenshots/narrow.png',
+          sizes: '322x716',
+          type: 'image/png',
+          form_factor: 'narrow',
+          label: 'Search barbershop tags',
+        },
+        {
+          src: 'screenshots/wide.png',
+          sizes: '852x546',
+          type: 'image/png',
+          form_factor: 'wide',
+          label: 'Search barbershop tags',
+        },
+      ],
     },
 
     workbox: {
