@@ -35,6 +35,15 @@ export interface SheetMusicData {
 }
 
 export async function getSheetMusic(url: string): Promise<SheetMusicData> {
+  // Cache Storage API requires a secure context and isn't available everywhere
+  // (e.g. some mobile browsers). Fall back to a plain fetch when it's absent.
+  if (typeof caches === 'undefined') {
+    const response = await fetch(proxyUrl(url));
+    if (!response.ok) throw new Error(`Failed to fetch sheet music: ${response.status}`);
+    const blob = await response.blob();
+    return { objectUrl: URL.createObjectURL(blob), mimeType: blob.type };
+  }
+
   const cache = await caches.open(CACHE_NAME);
   let lru = getLRU();
 
