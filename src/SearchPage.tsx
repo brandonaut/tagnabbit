@@ -89,6 +89,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   const [cacheMeta, setCacheMeta] = useState<TagCacheMeta | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ fetched: number; total: number } | null>(null);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false);
   const [localMatches, setLocalMatches] = useState<Map<string, FieldMatches>>(new Map());
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -109,20 +110,12 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
-      const [tags, meta] = await Promise.all([getCachedAllTags(), getTagCacheMeta()]);
-      if (cancelled || !tags || tags.length === 0) return;
-
-      setLocalTags(tags);
-      setCacheMeta(meta);
-
+    async function refreshIfStale(meta: TagCacheMeta | null) {
       if (!meta || !isCacheStale(meta.cachedAt) || isDownloading) return;
-
       setIsBackgroundRefreshing(true);
       try {
         const liveCount = await getTagCount();
         if (cancelled) return;
-
         if (liveCount === meta.count) {
           // Catalog unchanged — just reset the staleness timer
           const newMeta = await touchTagCache();
@@ -142,6 +135,39 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       } finally {
         if (!cancelled) setIsBackgroundRefreshing(false);
       }
+    }
+
+    (async () => {
+      const [tags, meta] = await Promise.all([getCachedAllTags(), getTagCacheMeta()]);
+      if (cancelled) return;
+
+      if (!tags || tags.length === 0) {
+        // No local cache — seed from the bundled snapshot so local mode is
+        // available immediately without the user pressing "Download all tags".
+        setIsSeeding(true);
+        try {
+          const resp = await fetch('/tags-snapshot.json');
+          if (!resp.ok || cancelled) return;
+          const snapshot = await resp.json() as { cachedAt: string; tags: Tag[] };
+          if (cancelled) return;
+          await storeAllTags(snapshot.tags, snapshot.cachedAt);
+          const [seededTags, seededMeta] = await Promise.all([getCachedAllTags(), getTagCacheMeta()]);
+          if (cancelled || !seededTags || seededTags.length === 0) return;
+          setLocalTags(seededTags);
+          setCacheMeta(seededMeta);
+          // Kick off a background refresh if the bundled snapshot is already stale.
+          await refreshIfStale(seededMeta);
+        } catch {
+          // Snapshot unavailable — fall back to API / manual-download mode.
+        } finally {
+          if (!cancelled) setIsSeeding(false);
+        }
+        return;
+      }
+
+      setLocalTags(tags);
+      setCacheMeta(meta);
+      await refreshIfStale(meta);
     })();
 
     return () => { cancelled = true; };
@@ -279,6 +305,10 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         )}
       </form>
 
+      {isSeeding && (
+        <p className="download-progress">Loading tag database…</p>
+      )}
+
       {isDownloading && downloadProgress && (
         <p className="download-progress">
           Downloading…{' '}
@@ -318,7 +348,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         </div>
       )}
 
-      {!isLocalMode && !isDownloading && (
+      {!isLocalMode && !isDownloading && !isSeeding && (
         <button className="download-all-btn" onClick={handleDownloadAll}>
           Download all tags for instant offline search
         </button>

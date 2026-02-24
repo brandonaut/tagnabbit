@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "fetch-tags": "bun run scripts/fetch-tags.ts"
   },
   "dependencies": {
     "fuse.js": "^7.1.0",
@@ -21,6 +22,7 @@
     "@types/react-dom": "^19.2.0",
     "@vite-pwa/assets-generator": "^1.0.2",
     "@vitejs/plugin-react": "^5.0.4",
+    "@xmldom/xmldom": "^0.8.11",
     "eslint": "^9.37.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.23",

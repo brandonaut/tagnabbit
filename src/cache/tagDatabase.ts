@@ -45,9 +45,9 @@ export async function getCachedAllTags(): Promise<Tag[] | null> {
   return (await dbGet<Tag[]>(db, 'tags')) ?? null;
 }
 
-export async function storeAllTags(tags: Tag[]): Promise<void> {
+export async function storeAllTags(tags: Tag[], cachedAt?: string): Promise<void> {
   const db = await openDB();
-  const meta: TagCacheMeta = { count: tags.length, cachedAt: new Date().toISOString() };
+  const meta: TagCacheMeta = { count: tags.length, cachedAt: cachedAt ?? new Date().toISOString() };
   await dbPutAll(db, [['tags', tags], ['meta', meta]]);
 }
 

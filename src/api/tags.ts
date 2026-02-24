@@ -24,22 +24,22 @@ export interface SearchResult {
 }
 
 function getText(el: Element, tag: string): string {
-  return el.querySelector(tag)?.textContent?.trim() ?? '';
+  return el.getElementsByTagName(tag)[0]?.textContent?.trim() ?? '';
 }
 
 function parseTagsXml(xml: string): SearchResult {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
 
-  if (doc.querySelector('parsererror')) {
+  if (doc.getElementsByTagName('parsererror').length > 0) {
     throw new Error('Invalid response from server');
   }
 
-  const tagsEl = doc.querySelector('tags');
+  const tagsEl = doc.getElementsByTagName('tags')[0];
   const available = parseInt(tagsEl?.getAttribute('available') ?? '0', 10);
   const count = parseInt(tagsEl?.getAttribute('count') ?? '0', 10);
 
-  const tags: Tag[] = Array.from(doc.querySelectorAll('tag')).map(el => ({
+  const tags: Tag[] = Array.from(doc.getElementsByTagName('tag')).map(el => ({
     id: getText(el, 'id'),
     title: getText(el, 'Title'),
     altTitle: getText(el, 'AltTitle'),
