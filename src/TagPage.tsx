@@ -76,7 +76,7 @@ export default function TagPage({ tag, onBack }: Props) {
               {tag.altTitle && <><dt>Alt title</dt><dd>{tag.altTitle}</dd></>}
               {tag.version && <><dt>Version</dt><dd>{tag.version}</dd></>}
               {tag.arranger && <><dt>Arranger</dt><dd>{tag.arranger}</dd></>}
-              {tag.key && <><dt>Key</dt><dd>{formatKey(tag.key)}</dd></>}
+              {tag.key && <><dt>Key</dt><dd>{tag.key}</dd></>}
               {tag.parts && <><dt>Parts</dt><dd>{tag.parts}</dd></>}
               {tag.type && <><dt>Type</dt><dd>{tag.type}</dd></>}
               {tag.ratingCount && tag.ratingCount !== '0' && (
