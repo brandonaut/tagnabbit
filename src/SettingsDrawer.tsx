@@ -86,7 +86,7 @@ export default function SettingsDrawer({
             Version {APP_VERSION}<br />
             Released {RELEASE_DATE}
           </p>
-          <a href="#" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/brandonaut/tagnabbit" target="_blank" rel="noopener noreferrer">GitHub</a>
         </section>
       </div>
     </>
