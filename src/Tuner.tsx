@@ -223,7 +223,7 @@ export default function Tuner({ tagKey }: Props) {
     : '#888';
 
   return (
-    <div className="absolute bottom-3 right-3 opacity-90 flex flex-col items-end gap-1">
+    <div className="fixed bottom-3 right-3 opacity-90 z-50 flex flex-col items-end gap-1">
       {active && (
         <div className="bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg py-[0.6rem] px-3 min-w-[110px] flex flex-col items-center gap-[0.2rem] z-10">
           {pitch ? (

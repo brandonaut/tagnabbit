@@ -78,7 +78,7 @@ export default function PitchPipe({ defaultNote }: Props) {
   }
 
   return (
-    <div className="absolute bottom-3 left-3 opacity-90" ref={containerRef}>
+    <div className="fixed bottom-3 left-3 opacity-90 z-50" ref={containerRef}>
       {pickerOpen && (
         <div className="absolute bottom-[calc(100%+0.5rem)] left-0 grid grid-cols-4 gap-1 bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg p-2 z-10">
           {CHROMATIC_NOTES.map(note => (
