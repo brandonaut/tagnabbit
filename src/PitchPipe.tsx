@@ -78,13 +78,13 @@ export default function PitchPipe({ defaultNote }: Props) {
   }
 
   return (
-    <div className="pitch-pipe" ref={containerRef}>
+    <div className="absolute bottom-3 left-3 opacity-90" ref={containerRef}>
       {pickerOpen && (
-        <div className="pitch-picker">
+        <div className="absolute bottom-[calc(100%+0.5rem)] left-0 grid grid-cols-4 gap-1 bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg p-2 z-10">
           {CHROMATIC_NOTES.map(note => (
             <button
               key={note}
-              className={`pitch-note${note === selectedNote ? ' selected' : ''}`}
+              className={`text-[0.85rem] py-[0.35em] px-[0.5em] min-w-[2.75rem] text-center${note === selectedNote ? ' bg-[#646cff] border-[#646cff] text-white' : ''}`}
               onClick={() => { setSelectedNote(note); setPickerOpen(false); }}
             >
               {note}
@@ -92,9 +92,9 @@ export default function PitchPipe({ defaultNote }: Props) {
           ))}
         </div>
       )}
-      <div className="pitch-pipe-controls">
+      <div className="flex">
         <button
-          className="tone-btn"
+          className="text-base select-none rounded-l-[6px] rounded-r-none border-r-0 active:bg-[#646cff] active:border-[#646cff] active:text-white"
           onMouseDown={startTone}
           onMouseUp={stopTone}
           onMouseLeave={stopTone}
@@ -105,7 +105,7 @@ export default function PitchPipe({ defaultNote }: Props) {
           {selectedNote}
         </button>
         <button
-          className="pitch-picker-btn"
+          className="py-[0.6em] px-[0.6em] rounded-l-none rounded-r-[6px] leading-none"
           onClick={() => setPickerOpen(o => !o)}
           aria-label="Change pitch"
         >

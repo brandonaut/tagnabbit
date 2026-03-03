@@ -276,11 +276,11 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   }
 
   return (
-    <div className="search-page">
-      <div className="search-header">
-        <h1>Tagnabbit</h1>
+    <div className="max-w-[800px] mx-auto py-8 px-4 flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h1 className="m-0">Tagnabbit</h1>
         <button
-          className="hamburger-btn"
+          className="text-2xl py-1 px-2 bg-transparent border-transparent leading-none"
           onClick={() => setSettingsOpen(true)}
           aria-label="Open settings"
         >
@@ -288,13 +288,13 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         </button>
       </div>
 
-      <form onSubmit={handleSearch} className="search-form">
+      <form onSubmit={handleSearch} className="flex gap-2">
         <input
           type="search"
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search barbershop tags..."
-          className="search-input"
+          className="flex-1 py-2 px-3 text-base border border-[#555] rounded-[6px] bg-inherit text-inherit focus:outline-2 focus:outline-[#646cff] focus:border-transparent"
           autoFocus
           disabled={loading || isDownloading}
         />
@@ -306,11 +306,11 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       </form>
 
       {isSeeding && (
-        <p className="download-progress">Loading tag database…</p>
+        <p className="text-sm text-[#888] m-0">Loading tag database…</p>
       )}
 
       {isDownloading && downloadProgress && (
-        <p className="download-progress">
+        <p className="text-sm text-[#888] m-0">
           Downloading…{' '}
           {downloadProgress.fetched.toLocaleString()}
           {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
@@ -319,8 +319,9 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       )}
 
       {isLocalMode && (
-        <div className="filters">
+        <div className="flex flex-wrap gap-2 items-center">
           <select
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-[6px] bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
             value={filters.type}
             onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}
           >
@@ -328,13 +329,14 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <select
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-[6px] bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
             value={filters.parts}
             onChange={e => setFilters(f => ({ ...f, parts: e.target.value }))}
           >
             <option value="">All parts</option>
             {partsOptions.map(p => <option key={p} value={p}>{p} parts</option>)}
           </select>
-          <label className="filter-checkbox">
+          <label className="flex items-center gap-[0.375rem] text-sm cursor-pointer text-[#aaa]">
             <input
               type="checkbox"
               checked={filters.learningTracks}
@@ -342,29 +344,29 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             />
             Learning tracks
           </label>
-          <button className="surprise-btn" onClick={handleSurpriseMe}>
+          <button className="ml-auto text-sm" onClick={handleSurpriseMe}>
             Surprise Me!
           </button>
         </div>
       )}
 
       {!isLocalMode && !isDownloading && !isSeeding && (
-        <button className="download-all-btn" onClick={handleDownloadAll}>
+        <button className="self-start text-sm" onClick={handleDownloadAll}>
           Download all tags for instant offline search
         </button>
       )}
 
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <p className="text-[#f87171] m-0" role="alert">{error}</p>}
 
       {result && result.tags.length > 0 && (
         <>
-          <p className="result-count">
+          <p className="text-sm text-[#888] m-0">
             {isLocalMode
               ? `${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ''}`
               : `${result.available.toLocaleString()} tags found, showing ${result.count}`
             }
           </p>
-          <ul className="tag-list">
+          <ul className="list-none p-0 m-0 flex flex-col gap-2">
             {result.tags.map(tag => {
               const fm = localMatches.get(tag.id);
               const hlField = (text: string, field: string) =>
@@ -375,26 +377,26 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
               return (
                 <li
                   key={tag.id}
-                  className="tag-item"
+                  className="py-3 px-4 border border-[#3334] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[#ffffff10] hover:outline hover:outline-2 hover:outline-[#646cff] focus:bg-[#ffffff10] focus:outline focus:outline-2 focus:outline-[#646cff]"
                   onClick={() => onSelectTag(tag, query, result)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={e => e.key === 'Enter' && onSelectTag(tag, query, result)}
                 >
-                  <div className="tag-title-line">
+                  <div className="flex justify-between items-baseline gap-2">
                     <div>
-                      <span className="tag-title">{hlField(tag.title, 'title')}</span>
+                      <span className="font-semibold">{hlField(tag.title, 'title')}</span>
                       {tag.altTitle && (
-                        <span className="tag-alt-title"> — {hlField(tag.altTitle, 'altTitle')}</span>
+                        <span className="text-[#aaa] text-[0.9em]"> — {hlField(tag.altTitle, 'altTitle')}</span>
                       )}
                     </div>
-                    <span className="tag-id">#{hlField(tag.id, 'id')}</span>
+                    <span className="text-[0.8rem] text-[#888] whitespace-nowrap">#{hlField(tag.id, 'id')}</span>
                   </div>
-                  <div className="tag-meta">
+                  <div className="flex flex-wrap gap-3 text-[0.8rem] text-[#888]">
                     {tag.arranger && <span>{hlField(tag.arranger, 'arranger')}</span>}
                     {tag.key && <span>{formatKey(tag.key)}</span>}
                     {tag.parts && <span>{tag.parts} parts</span>}
-                    <span className="tag-downloads">{tag.downloaded.toLocaleString()} downloads</span>
+                    <span>{tag.downloaded.toLocaleString()} downloads</span>
                   </div>
                 </li>
               );
@@ -404,7 +406,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       )}
 
       {result && result.tags.length === 0 && query.trim() && (
-        <p className="no-results">No tags found for "{query.trim()}".</p>
+        <p className="text-[#888] text-[0.9rem]">No tags found for "{query.trim()}".</p>
       )}
 
       <SettingsDrawer

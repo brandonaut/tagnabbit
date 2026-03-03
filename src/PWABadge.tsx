@@ -1,5 +1,3 @@
-import './PWABadge.css'
-
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 function PWABadge() {
@@ -32,18 +30,18 @@ function PWABadge() {
   }
 
   return (
-    <div className="PWABadge" role="alert" aria-labelledby="toast-message">
+    <div role="alert" aria-labelledby="toast-message">
       { (offlineReady || needRefresh)
       && (
-        <div className="PWABadge-toast">
-          <div className="PWABadge-message">
+        <div className="fixed right-0 bottom-0 m-4 p-3 border border-[#8885] rounded z-[1] text-left shadow-[3px_4px_5px_0_#8885] bg-white">
+          <div className="mb-2">
             { offlineReady
               ? <span id="toast-message">App ready to work offline</span>
               : <span id="toast-message">New content available, click on reload button to update.</span>}
           </div>
-          <div className="PWABadge-buttons">
-            { needRefresh && <button className="PWABadge-toast-button" onClick={() => updateServiceWorker(true)}>Reload</button> }
-            <button className="PWABadge-toast-button" onClick={() => close()}>Close</button>
+          <div>
+            { needRefresh && <button className="border border-[#8885] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]" onClick={() => updateServiceWorker(true)}>Reload</button> }
+            <button className="border border-[#8885] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]" onClick={() => close()}>Close</button>
           </div>
         </div>
       )}

@@ -223,37 +223,37 @@ export default function Tuner({ tagKey }: Props) {
     : '#888';
 
   return (
-    <div className="tuner">
+    <div className="absolute bottom-3 right-3 opacity-90 flex flex-col items-end gap-1">
       {active && (
-        <div className="tuner-panel">
+        <div className="bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg py-[0.6rem] px-3 min-w-[110px] flex flex-col items-center gap-[0.2rem] z-10">
           {pitch ? (
             <>
-              <div className="tuner-note">
-                {pitch.note}<span className="tuner-octave">{pitch.octave}</span>
+              <div className="text-[2rem] font-bold leading-none tracking-[-0.02em]">
+                {pitch.note}<span className="text-base font-normal [vertical-align:super] opacity-60">{pitch.octave}</span>
               </div>
-              <div className="tuner-meter">
+              <div className="relative w-full h-1 bg-[#3334] rounded-[2px] my-[0.2rem] overflow-visible after:content-[''] after:absolute after:left-[40%] after:w-1/5 after:h-full after:bg-[rgba(74,222,128,0.2)] after:rounded-[1px]">
                 <div
-                  className="tuner-needle"
+                  className="absolute -top-1 w-[3px] h-3 rounded-[1px] -translate-x-1/2 [transition:left_0.08s_ease-out,background-color_0.15s]"
                   style={{ left: `${50 + pitch.cents}%`, background: centsColor }}
                 />
               </div>
-              <div className="tuner-cents" style={{ color: centsColor }}>
+              <div className="text-[0.85rem] font-semibold tabular-nums min-w-[3.5em] text-center" style={{ color: centsColor }}>
                 {pitch.cents > 0 ? '+' : ''}{pitch.cents}¢
               </div>
               {degree && tagKey && (
-                <div className="tuner-degree">{degree} of {tagKey}</div>
+                <div className="text-xs text-[#888]">{degree} of {tagKey}</div>
               )}
             </>
           ) : (
-            <div className="tuner-listening">listening…</div>
+            <div className="text-[0.8rem] text-[#888] py-[0.4rem]">listening…</div>
           )}
         </div>
       )}
       {!active && error && (
-        <div className="tuner-error-float">{error}</div>
+        <div className="text-xs text-[#f87171] text-right max-w-[10rem]">{error}</div>
       )}
       <button
-        className={`tuner-btn${active ? ' active' : ''}`}
+        className={`text-base py-[0.45em] px-[0.65em] select-none${active ? ' bg-[#646cff] border-[#646cff] text-white' : ''}`}
         onClick={toggle}
         aria-label={active ? 'Stop tuner' : 'Start tuner'}
         title={active ? 'Stop tuner' : 'Tune'}

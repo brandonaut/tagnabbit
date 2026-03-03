@@ -3,7 +3,6 @@ import PWABadge from './PWABadge.tsx'
 import SearchPage from './SearchPage.tsx'
 import TagPage from './TagPage.tsx'
 import { type Tag, type SearchResult } from './api/tags.ts'
-import './App.css'
 
 interface SearchState {
   query: string;
