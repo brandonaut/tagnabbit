@@ -122,7 +122,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
           if (!cancelled) setCacheMeta(newMeta);
         } else {
           // New tags available — re-download silently
-          const newTags = await fetchAllTags(() => {});
+          const newTags = await fetchAllTags(() => { });
           if (cancelled) return;
           await storeAllTags(newTags);
           const newMeta = await getTagCacheMeta();
@@ -276,7 +276,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
   }
 
   return (
-    <div className="max-w-[800px] mx-auto py-8 px-4 flex flex-col gap-4">
+    <div className="max-w-2xl mx-auto py-8 px-4 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="m-0">Tagnabbit</h1>
         <button
@@ -294,7 +294,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="Search barbershop tags..."
-          className="flex-1 py-2 px-3 text-base border border-[#555] rounded-[6px] bg-inherit text-inherit focus:outline-2 focus:outline-[#646cff] focus:border-transparent"
+          className="flex-1 py-2 px-3 text-base border border-[#555] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[#646cff] focus:border-transparent"
           autoFocus
           disabled={loading || isDownloading}
         />
@@ -321,7 +321,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       {isLocalMode && (
         <div className="flex flex-wrap gap-2 items-center">
           <select
-            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-[6px] bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-md bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
             value={filters.type}
             onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}
           >
@@ -329,7 +329,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             {typeOptions.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           <select
-            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-[6px] bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-md bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
             value={filters.parts}
             onChange={e => setFilters(f => ({ ...f, parts: e.target.value }))}
           >
@@ -406,7 +406,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       )}
 
       {result && result.tags.length === 0 && query.trim() && (
-        <p className="text-[#888] text-[0.9rem]">No tags found for "{query.trim()}".</p>
+        <p className="text-[#888] text-sm">No tags found for "{query.trim()}".</p>
       )}
 
       <SettingsDrawer
