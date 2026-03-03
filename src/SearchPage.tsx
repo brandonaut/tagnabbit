@@ -149,7 +149,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         // available immediately without the user pressing "Download all tags".
         setIsSeeding(true);
         try {
-          const resp = await fetch('/tags-snapshot.json');
+          const resp = await fetch(`${import.meta.env.BASE_URL}tags-snapshot.json`);
           if (!resp.ok || cancelled) return;
           const snapshot = await resp.json() as { cachedAt: string; tags: Tag[] };
           if (cancelled) return;
