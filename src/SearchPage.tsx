@@ -277,16 +277,14 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h1 className="m-0">Tagnabbit</h1>
-        <button
-          className="text-2xl py-1 px-2 bg-transparent border-transparent leading-none"
-          onClick={() => setSettingsOpen(true)}
-          aria-label="Open settings"
-        >
-          ☰
-        </button>
-      </div>
+      <h1 className="m-0">Tagnabbit</h1>
+      <button
+        className="fixed top-3 right-3 z-50 text-2xl py-1 px-2 bg-transparent border-transparent leading-none"
+        onClick={() => setSettingsOpen(true)}
+        aria-label="Open settings"
+      >
+        ☰
+      </button>
 
       <form onSubmit={handleSearch} className="flex gap-2">
         <input
