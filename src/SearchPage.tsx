@@ -340,14 +340,15 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             <option value="">All parts</option>
             {partsOptions.map(p => <option key={p} value={p}>{p} parts</option>)}
           </select>
-          <label className="flex items-center gap-[0.375rem] text-sm cursor-pointer text-[#aaa]">
+          {/* Hide the learning track filter until we can actually play the learning tracks! */}
+          {/* <label className="hidden flex items-center gap-[0.375rem] text-sm cursor-pointer text-[#aaa]">
             <input
               type="checkbox"
               checked={filters.learningTracks}
               onChange={e => setFilters(f => ({ ...f, learningTracks: e.target.checked }))}
             />
             Learning tracks
-          </label>
+          </label> */}
           <button className="ml-auto text-sm" onClick={handleSurpriseMe}>
             Surprise Me!
           </button>
