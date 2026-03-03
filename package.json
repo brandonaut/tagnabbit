@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "fetch-tags": "bun run scripts/fetch-tags.ts"
+    "fetch-tags": "bun run scripts/fetch-tags.ts",
+    "deploy": "bash scripts/deploy.sh"
   },
   "dependencies": {
     "fuse.js": "^7.1.0",

@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/tagnabbit/' : '/',
   // server: {
   //   proxy: {
   //     '/bst-proxy': {
@@ -62,4 +63,4 @@ export default defineConfig({
       type: 'module',
     },
   })],
-})
+}))
