@@ -174,7 +174,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [isDownloading]);
 
   // Build Fuse index when local tags are loaded
   useEffect(() => {
