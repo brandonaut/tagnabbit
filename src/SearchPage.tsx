@@ -104,6 +104,9 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     , [localTags]);
 
   const fuseRef = useRef<Fuse<Tag> | null>(null);
+  // True when showing Surprise Me results (no query). Used to prevent the
+  // fuzzy search effect from clearing the result on remount.
+  const isSurpriseRef = useRef(!initialQuery && !!initialResult);
   const isLocalMode = localTags !== null;
 
   // Load local tag database on mount, then check staleness in background
@@ -186,10 +189,12 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
 
     const q = query.trim();
     if (!q) {
+      if (isSurpriseRef.current) return; // Preserve Surprise Me results on remount
       setResult(null);
       setLocalMatches(new Map());
       return;
     }
+    isSurpriseRef.current = false;
 
     const all = fuse.search(q);
     const filtered = all.filter(r => {
@@ -271,6 +276,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       [copy[i], copy[j]] = [copy[j], copy[i]];
     }
     const sampled = copy.slice(0, SURPRISE_COUNT);
+    isSurpriseRef.current = true;
     setResult({ available: pool.length, count: sampled.length, tags: sampled });
     setLocalMatches(new Map());
   }
