@@ -23,13 +23,14 @@ export default function PdfViewer({ url, title }: Props) {
 
       container.innerHTML = '';
       const containerWidth = container.clientWidth;
+      const dpr = window.devicePixelRatio || 1;
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         if (cancelled) break;
 
         const page = await pdf.getPage(pageNum);
         const baseViewport = page.getViewport({ scale: 1 });
-        const scale = (containerWidth || 800) / baseViewport.width;
+        const scale = ((containerWidth || 800) / baseViewport.width) * dpr;
         const viewport = page.getViewport({ scale });
 
         const canvas = document.createElement('canvas');
