@@ -87,6 +87,7 @@ export default function SettingsDrawer({
             Released {RELEASE_DATE}
           </p>
           <a href="https://github.com/brandonaut/tagnabbit" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <p className="text-sm text-[#aaa] m-0 leading-relaxed">Tags sourced from <a href="https://www.barbershoptags.com" target="_blank" rel="noopener noreferrer">BarbershopTags.com</a></p>
         </section>
       </div>
     </>
