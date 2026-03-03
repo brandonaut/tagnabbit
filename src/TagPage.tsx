@@ -139,14 +139,6 @@ export default function TagPage({ tag, onBack }: Props) {
             <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : 'C'} />
             <Tuner tagKey={tag.key ? formatKey(tag.key) : 'C'} />
           </div>
-          <a
-            href={sheetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm"
-          >
-            Open in new tab
-          </a>
         </div>
       )}
     </div>
