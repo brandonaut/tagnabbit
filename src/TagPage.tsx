@@ -4,6 +4,7 @@ import { getSheetMusic } from './cache/sheetMusic';
 import { formatKey } from './formatKey';
 import PitchPipe from './PitchPipe';
 import Tuner from './Tuner';
+import PdfViewer from './PdfViewer';
 
 interface Props {
   tag: Tag;
@@ -54,6 +55,7 @@ export default function TagPage({ tag, onBack }: Props) {
   }, [sheetUrl]);
 
   const isImage = mimeType.startsWith('image/');
+  const isPdf = mimeType === 'application/pdf';
 
   return (
     <div className="flex flex-col gap-3 p-4 pb-20">
@@ -125,6 +127,8 @@ export default function TagPage({ tag, onBack }: Props) {
                 alt={`Sheet music for ${tag.title}`}
                 className="w-full h-auto border border-[#3334] rounded-md"
               />
+            ) : isPdf ? (
+              <PdfViewer url={objectUrl} title={`Sheet music for ${tag.title}`} />
             ) : (
               <iframe
                 src={objectUrl}
