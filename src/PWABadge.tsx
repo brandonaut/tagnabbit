@@ -27,10 +27,11 @@ function PWABadge() {
     setNeedRefresh(false)
   }
 
+
   return (
     <div role="alert" aria-labelledby="toast-message">
       {(offlineReady || needRefresh) && (
-        <div className="fixed right-0 bottom-0 m-4 p-3 border border-[#8885] rounded z-[1] text-left shadow-[3px_4px_5px_0_#8885] bg-white">
+        <div className="fixed right-0 bottom-0 m-4 p-3 border border-[#8885] rounded z-[1] text-left shadow-[3px_4px_5px_0_#8885] bg-black text-[#213547] text-[rgba(255,255,255,0.87)]">
           <div className="mb-2">
             {offlineReady ? (
               <span id="toast-message">App ready to work offline</span>
