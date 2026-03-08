@@ -80,7 +80,7 @@ export default function TagPage({ tag, onBack }: Props) {
           onClick={() => setInfoOpen(true)}
           aria-label="Tag information"
         >
-          <Info size={18} />
+          <Info size={18} color="var(--text-muted)" />
         </button>
       </div>
 
