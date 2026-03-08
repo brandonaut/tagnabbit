@@ -1,3 +1,4 @@
+import { X } from "lucide-react"
 import { useEffect } from "react"
 import type { TagCacheMeta } from "./cache/tagDatabase"
 
@@ -49,11 +50,11 @@ export default function SettingsDrawer({
           <h2 className="m-0 text-xl">Settings</h2>
           <button
             type="button"
-            className="text-base py-1 px-2 bg-transparent border-transparent leading-none"
+            className="py-1 px-2 bg-transparent border-transparent leading-none"
             onClick={onClose}
             aria-label="Close settings"
           >
-            ✕
+            <X size={16} />
           </button>
         </div>
 

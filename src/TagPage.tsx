@@ -1,3 +1,4 @@
+import { ArrowLeft, Info, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
@@ -60,8 +61,12 @@ export default function TagPage({ tag, onBack }: Props) {
   return (
     <div className="flex flex-col gap-3 p-4 pb-20">
       <div className="flex items-center gap-2">
-        <button type="button" className="text-[0.9rem] shrink-0" onClick={onBack}>
-          ← Back
+        <button
+          type="button"
+          className="shrink-0 flex items-center gap-1 text-[0.9rem]"
+          onClick={onBack}
+        >
+          <ArrowLeft size={16} />
         </button>
         <span className="flex-1 text-[0.95rem] font-semibold overflow-hidden whitespace-nowrap text-ellipsis">
           {tag.title}
@@ -69,10 +74,11 @@ export default function TagPage({ tag, onBack }: Props) {
         <span className="text-[0.8rem] text-[#888] whitespace-nowrap shrink-0">#{tag.id}</span>
         <button
           type="button"
-          className="text-base py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
+          className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
           onClick={() => setInfoOpen(true)}
+          aria-label="Tag information"
         >
-          ⓘ
+          <Info size={18} />
         </button>
       </div>
 
@@ -90,10 +96,11 @@ export default function TagPage({ tag, onBack }: Props) {
               <strong className="text-base leading-[1.3]">{tag.title}</strong>
               <button
                 type="button"
-                className="text-[0.9rem] py-[0.2em] px-[0.45em] bg-transparent border-transparent leading-none shrink-0"
+                className="py-[0.2em] px-[0.45em] bg-transparent border-transparent leading-none shrink-0"
                 onClick={() => setInfoOpen(false)}
+                aria-label="Close"
               >
-                ✕
+                <X size={16} />
               </button>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-[0.4rem] m-0 text-[0.9rem]">

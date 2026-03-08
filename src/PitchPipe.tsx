@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 
 const CHROMATIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -124,7 +125,7 @@ export default function PitchPipe({ defaultNote }: Props) {
           onClick={() => setPickerOpen((o) => !o)}
           aria-label="Change pitch"
         >
-          ▾
+          <ChevronDown size={14} />
         </button>
       </div>
     </div>

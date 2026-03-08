@@ -1,3 +1,4 @@
+import { Mic } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
@@ -281,12 +282,12 @@ export default function Tuner({ tagKey }: Props) {
       )}
       <button
         type="button"
-        className={`text-base py-[0.45em] px-[0.65em] select-none${active ? " bg-[#646cff] border-[#646cff] text-white" : ""}`}
+        className={`py-[0.45em] px-[0.65em] select-none${active ? " bg-[#646cff] border-[#646cff] text-white" : ""}`}
         onClick={toggle}
         aria-label={active ? "Stop tuner" : "Start tuner"}
         title={active ? "Stop tuner" : "Tune"}
       >
-        ♩
+        <Mic size={18} />
       </button>
     </div>
   )

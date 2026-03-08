@@ -1,4 +1,5 @@
 import Fuse, { type IFuseOptions } from "fuse.js"
+import { Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { fetchAllTags, getTagCount, type SearchResult, searchTags, type Tag } from "./api/tags"
 import {
@@ -303,22 +304,28 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       <h1 className="m-0 text-2xl font-bold top-3 left-3">Tagnabbit</h1>
       <button
         type="button"
-        className="fixed top-3 right-3 z-50 text-2xl py-1 px-2 bg-transparent border-transparent leading-none"
+        className="fixed top-3 right-3 z-50 py-1 px-2 bg-transparent border-transparent leading-none"
         onClick={() => setSettingsOpen(true)}
         aria-label="Open settings"
       >
-        ☰
+        <Menu size={22} />
       </button>
 
       <form onSubmit={handleSearch} className="flex gap-2">
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search barbershop tags..."
-          className="flex-1 py-2 px-3 text-base border border-[#555] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[#646cff] focus:border-transparent"
-          disabled={loading || isDownloading}
-        />
+        <div className="relative flex-1">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#888] pointer-events-none"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search barbershop tags..."
+            className="w-full py-2 pl-9 pr-3 text-base border border-[#555] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[#646cff] focus:border-transparent"
+            disabled={loading || isDownloading}
+          />
+        </div>
         {!isLocalMode && (
           <button type="submit" disabled={loading || !query.trim() || isDownloading}>
             {loading ? "Searching…" : "Search"}
