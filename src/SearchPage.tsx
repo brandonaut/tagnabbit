@@ -27,17 +27,36 @@ function isCacheStale(cachedAt: string): boolean {
   return Date.now() - new Date(cachedAt).getTime() > STALE_MS + JITTER_MS
 }
 
+const FUSE_KEYS = ["id", "title", "altTitle", "version", "arranger"] as const
+
 const FUSE_OPTIONS: IFuseOptions<Tag> = {
   keys: [
-    { name: "id", weight: 3 },
+    { name: "id", weight: 4 },
     { name: "title", weight: 3 },
     { name: "altTitle", weight: 2 },
+    { name: "version", weight: 2 },
     { name: "arranger", weight: 1 },
   ],
   includeMatches: true,
   threshold: 0.4,
   minMatchCharLength: 2,
   ignoreLocation: true,
+  useExtendedSearch: true,
+}
+
+// For multi-word queries, require each term to match at least one field.
+// This lets "coney smith" find a tag titled "Coney Island" arranged by "Smith".
+// Terms shorter than minMatchCharLength are dropped so a trailing "b" doesn't
+// exclude results that would otherwise match the longer terms.
+function buildFuseQuery(q: string) {
+  const terms = q
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length >= 2)
+  if (terms.length <= 1) return terms[0] ?? q
+  return {
+    $and: terms.map((term) => ({ $or: FUSE_KEYS.map((key) => ({ [key]: term })) })),
+  }
 }
 
 // Highlight a substring match (used in API mode)
@@ -213,7 +232,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     }
     isSurpriseRef.current = false
 
-    const all = fuse.search(q)
+    const all = fuse.search(buildFuseQuery(q))
     const filtered = all.filter((r) => {
       const tag = r.item
       if (filters.type && tag.type !== filters.type) return false
@@ -432,7 +451,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                   </div>
                   {tag.version && (
                     <div className="text-[0.85em] text-[var(--text-muted)] italic">
-                      {tag.version}
+                      {hlField(tag.version, "version")}
                     </div>
                   )}
                   <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
