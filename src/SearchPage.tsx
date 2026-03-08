@@ -1,5 +1,5 @@
 import Fuse, { type IFuseOptions } from "fuse.js"
-import { Menu, Search } from "lucide-react"
+import { Download, Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { fetchAllTags, getTagCount, type SearchResult, searchTags, type Tag } from "./api/tags"
 import {
@@ -11,6 +11,13 @@ import {
 } from "./cache/tagDatabase"
 import { formatKey } from "./formatKey"
 import SettingsDrawer from "./SettingsDrawer"
+
+function formatDownloads(n: number): string {
+  if (n < 100) return String(n)
+  if (n < 1000) return `${Math.floor(n / 100) * 100}+`
+  if (n < 10000) return `${(Math.floor(n / 100) / 10).toFixed(1).replace(/\.0$/, "")}k+`
+  return `${Math.floor(n / 1000)}k+`
+}
 
 // Character ranges [start, end] (inclusive) from Fuse match indices
 type MatchRanges = ReadonlyArray<readonly [number, number]>
@@ -458,7 +465,10 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                     {tag.arranger && <span>{hlField(tag.arranger, "arranger")}</span>}
                     {tag.key && <span>{formatKey(tag.key)}</span>}
                     {tag.parts && <span>{tag.parts} parts</span>}
-                    <span>{tag.downloaded.toLocaleString()} downloads</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Download size={11} />
+                      {formatDownloads(tag.downloaded)}
+                    </span>
                   </div>
                 </li>
               )
