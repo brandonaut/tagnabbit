@@ -417,7 +417,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                   onKeyDown={(e) => e.key === "Enter" && onSelectTag(tag, query, result)}
                 >
                   <div className="flex justify-between items-baseline gap-2">
-                    <div>
+                    <div className="min-w-0">
                       <span className="font-semibold">{hlField(tag.title, "title")}</span>
                       {tag.altTitle && (
                         <span className="text-[var(--text-muted)] text-[0.9em]">
@@ -426,10 +426,15 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                         </span>
                       )}
                     </div>
-                    <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
+                    <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap shrink-0">
                       #{hlField(tag.id, "id")}
                     </span>
                   </div>
+                  {tag.version && (
+                    <div className="text-[0.85em] text-[var(--text-muted)] italic">
+                      {tag.version}
+                    </div>
+                  )}
                   <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
                     {tag.arranger && <span>{hlField(tag.arranger, "arranger")}</span>}
                     {tag.key && <span>{formatKey(tag.key)}</span>}
