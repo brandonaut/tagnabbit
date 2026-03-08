@@ -28,7 +28,7 @@ bun run prek install
 bun run dev
 ```
 
-Opens the app at `http://localhost:5173` with hot module replacement.
+Opens the app at `http://localhost:5173/tagnabbit` with hot module replacement.
 
 ## Build
 
