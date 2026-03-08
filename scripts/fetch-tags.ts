@@ -9,21 +9,21 @@
  * snapshot is more than 7 days old when a user first opens the app.
  */
 
-import { DOMParser } from '@xmldom/xmldom';
-import { writeFileSync, mkdirSync } from 'fs';
+import { DOMParser } from "@xmldom/xmldom"
+import { mkdirSync, writeFileSync } from "fs"
 
 // Polyfill DOMParser so src/api/tags.ts can run outside a browser context.
-(globalThis as unknown as Record<string, unknown>).DOMParser = DOMParser;
+;(globalThis as unknown as Record<string, unknown>).DOMParser = DOMParser
 
-const { fetchAllTags } = await import('../src/api/tags.ts');
+const { fetchAllTags } = await import("../src/api/tags.ts")
 
-console.log('Fetching all tags from barbershoptags.com…');
+console.log("Fetching all tags from barbershoptags.com…")
 const tags = await fetchAllTags((fetched: number, total: number) => {
-  process.stdout.write(`\r  ${fetched.toLocaleString()} / ${total.toLocaleString()} tags`);
-});
-process.stdout.write('\n');
+  process.stdout.write(`\r  ${fetched.toLocaleString()} / ${total.toLocaleString()} tags`)
+})
+process.stdout.write("\n")
 
-mkdirSync('public', { recursive: true });
-const outPath = 'public/tags-snapshot.json';
-writeFileSync(outPath, JSON.stringify({ cachedAt: new Date().toISOString(), tags }));
-console.log(`Wrote ${tags.length.toLocaleString()} tags to ${outPath}`);
+mkdirSync("public", { recursive: true })
+const outPath = "public/tags-snapshot.json"
+writeFileSync(outPath, JSON.stringify({ cachedAt: new Date().toISOString(), tags }))
+console.log(`Wrote ${tags.length.toLocaleString()} tags to ${outPath}`)

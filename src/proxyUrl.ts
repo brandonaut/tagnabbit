@@ -9,5 +9,5 @@ export function proxyUrl(url: string): string {
   // if (import.meta.env.DEV && url.startsWith(BST_ORIGIN)) {
   //   return '/bst-proxy' + url.slice(BST_ORIGIN.length);
   // }
-  return url;
+  return url
 }

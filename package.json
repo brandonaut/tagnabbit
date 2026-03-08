@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint .",
+    "lint": "biome check .",
     "preview": "vite preview",
     "fetch-tags": "bun run scripts/fetch-tags.ts",
     "deploy": "bash scripts/deploy.sh"
@@ -18,7 +18,7 @@
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.37.0",
+    "@biomejs/biome": "^2.4.6",
     "@tailwindcss/vite": "^4.2.1",
     "@types/node": "^24.6.2",
     "@types/react": "^19.2.0",
@@ -26,13 +26,8 @@
     "@vite-pwa/assets-generator": "^1.0.2",
     "@vitejs/plugin-react": "^5.0.4",
     "@xmldom/xmldom": "^0.8.11",
-    "eslint": "^9.37.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.23",
-    "globals": "^16.4.0",
     "tailwindcss": "^4.2.1",
     "typescript": "~5.9.3",
-    "typescript-eslint": "^8.45.0",
     "vite": "^7.1.9",
     "vite-plugin-pwa": "^1.1.0",
     "workbox-core": "^7.3.0",
