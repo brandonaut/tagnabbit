@@ -4,8 +4,8 @@ import { defineConfig } from "vite"
 import { VitePWA } from "vite-plugin-pwa"
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  base: mode === "production" ? "/tagnabbit/" : "/",
+export default defineConfig(() => ({
+  base: "/tagnabbit/",
   // server: {
   //   proxy: {
   //     '/bst-proxy': {
