@@ -315,14 +315,14 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         <div className="relative flex-1">
           <Search
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[#888] pointer-events-none"
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
           />
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search barbershop tags..."
-            className="w-full py-2 pl-9 pr-3 text-base border border-[#555] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[#646cff] focus:border-transparent"
+            className="w-full py-2 pl-9 pr-3 text-base border border-[var(--border)] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[var(--accent)] focus:border-transparent"
             disabled={loading || isDownloading}
           />
         </div>
@@ -333,10 +333,10 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
         )}
       </form>
 
-      {isSeeding && <p className="text-sm text-[#888] m-0">Loading tag database…</p>}
+      {isSeeding && <p className="text-sm text-[var(--text-muted)] m-0">Loading tag database…</p>}
 
       {isDownloading && downloadProgress && (
-        <p className="text-sm text-[#888] m-0">
+        <p className="text-sm text-[var(--text-muted)] m-0">
           Downloading… {downloadProgress.fetched.toLocaleString()}
           {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
           {" tags"}
@@ -346,7 +346,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       {isLocalMode && (
         <div className="flex flex-wrap gap-2 items-center">
           <select
-            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-md bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
             value={filters.type}
             onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
           >
@@ -358,7 +358,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             ))}
           </select>
           <select
-            className="font-sans text-sm py-[0.3rem] px-2 border border-[#555] rounded-md bg-[#f9f9f9] dark:bg-[#1a1a1a] cursor-pointer"
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
             value={filters.parts}
             onChange={(e) => setFilters((f) => ({ ...f, parts: e.target.value }))}
           >
@@ -398,7 +398,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
 
       {result && result.tags.length > 0 && (
         <>
-          <p className="text-sm text-[#888] m-0">
+          <p className="text-sm text-[var(--text-muted)] m-0">
             {isLocalMode
               ? `${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`
               : `${result.available.toLocaleString()} tags found, showing ${result.count}`}
@@ -412,7 +412,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
               return (
                 <li
                   key={tag.id}
-                  className="py-3 px-4 border border-[#3334] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[#ffffff10] hover:outline hover:outline-2 hover:outline-[#646cff] focus:bg-[#ffffff10] focus:outline focus:outline-2 focus:outline-[#646cff]"
+                  className="py-3 px-4 border border-[var(--border)] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[var(--accent)]/10 hover:outline hover:outline-2 hover:outline-[var(--accent)] focus:bg-[var(--accent)]/10 focus:outline focus:outline-2 focus:outline-[var(--accent)]"
                   onClick={() => onSelectTag(tag, query, result)}
                   onKeyDown={(e) => e.key === "Enter" && onSelectTag(tag, query, result)}
                 >
@@ -420,17 +420,17 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
                     <div>
                       <span className="font-semibold">{hlField(tag.title, "title")}</span>
                       {tag.altTitle && (
-                        <span className="text-[#aaa] text-[0.9em]">
+                        <span className="text-[var(--text-muted)] text-[0.9em]">
                           {" "}
                           — {hlField(tag.altTitle, "altTitle")}
                         </span>
                       )}
                     </div>
-                    <span className="text-[0.8rem] text-[#888] whitespace-nowrap">
+                    <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
                       #{hlField(tag.id, "id")}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-3 text-[0.8rem] text-[#888]">
+                  <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
                     {tag.arranger && <span>{hlField(tag.arranger, "arranger")}</span>}
                     {tag.key && <span>{formatKey(tag.key)}</span>}
                     {tag.parts && <span>{tag.parts} parts</span>}
@@ -444,7 +444,7 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
       )}
 
       {result && result.tags.length === 0 && query.trim() && (
-        <p className="text-[#888] text-sm">No tags found for "{query.trim()}".</p>
+        <p className="text-[var(--text-muted)] text-sm">No tags found for "{query.trim()}".</p>
       )}
 
       <SettingsDrawer

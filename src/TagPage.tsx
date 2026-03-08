@@ -71,7 +71,9 @@ export default function TagPage({ tag, onBack }: Props) {
         <span className="flex-1 text-[0.95rem] font-semibold overflow-hidden whitespace-nowrap text-ellipsis">
           {tag.title}
         </span>
-        <span className="text-[0.8rem] text-[#888] whitespace-nowrap shrink-0">#{tag.id}</span>
+        <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap shrink-0">
+          #{tag.id}
+        </span>
         <button
           type="button"
           className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
@@ -88,7 +90,7 @@ export default function TagPage({ tag, onBack }: Props) {
           {/* biome-ignore lint/a11y/noStaticElementInteractions: backdrop overlay */}
           <div className="fixed inset-0 z-[100]" onClick={() => setInfoOpen(false)} />
           <div
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-[10px] p-5 w-[min(360px,90vw)] flex flex-col gap-4 shadow-[0_8px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[101] bg-[var(--bg-surface)] border border-[var(--border)] rounded-[10px] p-5 w-[min(360px,90vw)] flex flex-col gap-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)]"
             role="dialog"
             aria-label="Tag information"
           >
@@ -106,7 +108,7 @@ export default function TagPage({ tag, onBack }: Props) {
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-[0.4rem] m-0 text-[0.9rem]">
               {tag.altTitle && (
                 <>
-                  <dt className="text-[#888] text-xs uppercase tracking-[0.05em] self-center">
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
                     Alt title
                   </dt>
                   <dd className="m-0">{tag.altTitle}</dd>
@@ -114,7 +116,7 @@ export default function TagPage({ tag, onBack }: Props) {
               )}
               {tag.version && (
                 <>
-                  <dt className="text-[#888] text-xs uppercase tracking-[0.05em] self-center">
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
                     Version
                   </dt>
                   <dd className="m-0">{tag.version}</dd>
@@ -122,7 +124,7 @@ export default function TagPage({ tag, onBack }: Props) {
               )}
               {tag.arranger && (
                 <>
-                  <dt className="text-[#888] text-xs uppercase tracking-[0.05em] self-center">
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
                     Arranger
                   </dt>
                   <dd className="m-0">{tag.arranger}</dd>
@@ -130,7 +132,7 @@ export default function TagPage({ tag, onBack }: Props) {
               )}
               {tag.key && (
                 <>
-                  <dt className="text-[#888] text-xs uppercase tracking-[0.05em] self-center">
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
                     Key
                   </dt>
                   <dd className="m-0">{tag.key}</dd>
@@ -138,7 +140,7 @@ export default function TagPage({ tag, onBack }: Props) {
               )}
               {tag.parts && (
                 <>
-                  <dt className="text-[#888] text-xs uppercase tracking-[0.05em] self-center">
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
                     Parts
                   </dt>
                   <dd className="m-0">{tag.parts}</dd>
@@ -146,7 +148,7 @@ export default function TagPage({ tag, onBack }: Props) {
               )}
               {tag.type && (
                 <>
-                  <dt className="text-[#888] text-xs uppercase tracking-[0.05em] self-center">
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
                     Type
                   </dt>
                   <dd className="m-0">{tag.type}</dd>
@@ -154,7 +156,7 @@ export default function TagPage({ tag, onBack }: Props) {
               )}
               {tag.ratingCount && tag.ratingCount !== "0" && (
                 <>
-                  <dt className="text-[#888] text-xs uppercase tracking-[0.05em] self-center">
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
                     Rating
                   </dt>
                   <dd className="m-0">
@@ -167,9 +169,9 @@ export default function TagPage({ tag, onBack }: Props) {
         </>
       )}
 
-      {!sheetUrl && <p className="text-[#888]">No sheet music available.</p>}
+      {!sheetUrl && <p className="text-[var(--text-muted)]">No sheet music available.</p>}
 
-      {sheetUrl && loading && <p className="text-[#888]">Loading sheet music…</p>}
+      {sheetUrl && loading && <p className="text-[var(--text-muted)]">Loading sheet music…</p>}
 
       {sheetUrl && error && (
         <div>
@@ -189,7 +191,7 @@ export default function TagPage({ tag, onBack }: Props) {
               <img
                 src={objectUrl}
                 alt={`Sheet music for ${tag.title}`}
-                className="w-full h-auto border border-[#3334] rounded-md"
+                className="w-full h-auto border border-[var(--border)] rounded-md"
               />
             ) : isPdf ? (
               <PdfViewer url={objectUrl} title={`Sheet music for ${tag.title}`} />
@@ -197,7 +199,7 @@ export default function TagPage({ tag, onBack }: Props) {
               <iframe
                 src={objectUrl}
                 title={`Sheet music for ${tag.title}`}
-                className="w-full h-[80vh] border border-[#3334] rounded-md"
+                className="w-full h-[80vh] border border-[var(--border)] rounded-md"
               />
             )}
             <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : "C"} />

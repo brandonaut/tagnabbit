@@ -30,7 +30,7 @@ function PWABadge() {
   return (
     <div role="alert" aria-labelledby="toast-message">
       {(offlineReady || needRefresh) && (
-        <div className="fixed right-0 bottom-0 m-4 p-3 border border-[#8885] rounded z-[1] text-left shadow-[3px_4px_5px_0_#8885] bg-black text-[#213547] text-[rgba(255,255,255,0.87)]">
+        <div className="fixed right-0 bottom-0 m-4 p-3 border border-[var(--border)] rounded z-[1] text-left shadow-[3px_4px_5px_0_rgba(0,0,0,0.4)] bg-[var(--bg-surface)] text-[var(--text)]">
           <div className="mb-2">
             {offlineReady ? (
               <span id="toast-message">App ready to work offline</span>
@@ -44,7 +44,7 @@ function PWABadge() {
             {needRefresh && (
               <button
                 type="button"
-                className="border border-[#8885] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]"
+                className="border border-[var(--border)] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]"
                 onClick={() => updateServiceWorker(true)}
               >
                 Reload
@@ -52,7 +52,7 @@ function PWABadge() {
             )}
             <button
               type="button"
-              className="border border-[#8885] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]"
+              className="border border-[var(--border)] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]"
               onClick={() => close()}
             >
               Close
