@@ -27,7 +27,6 @@ function PWABadge() {
     setNeedRefresh(false)
   }
 
-
   return (
     <div role="alert" aria-labelledby="toast-message">
       {(offlineReady || needRefresh) && (
