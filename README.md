@@ -17,6 +17,9 @@ Search Barbershop Tags Fast — a PWA built with React, TypeScript, and Vite.
 
 ```sh
 bun install
+
+# pre-commit hooks
+bun run prek install
 ```
 
 ## Development

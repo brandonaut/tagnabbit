@@ -1,0 +1,5 @@
+[[repos]]
+repo = "local"
+hooks = [
+    { id = "lint", name = "lint", language = "bun", entry = "bun run lint -- --fix", files = "\\.(ts|tsx|js|jsx|json|yaml|yml)$" },
+]
