@@ -350,14 +350,14 @@ export default function SearchPage({
           />
           <button
             type="button"
-            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "search" ? "text-[var(--bg)]" : "text-[var(--text-muted)]"}`}
+            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "search" ? "bg-[var(--accent)]/25 text-[var(--bg-surface)]" : "bg-[var(--bg)] text-[var(--text-muted)]"}`}
             onClick={() => setActiveTab("search")}
           >
             Search
           </button>
           <button
             type="button"
-            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "favorites" ? "text-[var(--bg)]" : "text-[var(--text-muted)]"}`}
+            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "favorites" ? "bg-[var(--accent)]/25 text-[var(--bg-surface)]" : "bg-[var(--bg)] text-[var(--text-muted)]"}`}
             onClick={() => setActiveTab("favorites")}
           >
             Favorites
