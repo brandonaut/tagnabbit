@@ -85,7 +85,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
         >
           <Heart
             size={18}
-            fill={favorited ? "currentColor" : "none"}
+            fill={favorited ? "var(--accent)" : "none"}
             color={favorited ? "var(--accent)" : "var(--text-muted)"}
           />
         </button>

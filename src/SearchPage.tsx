@@ -411,7 +411,7 @@ export default function SearchPage({
                         }}
                         aria-label="Remove from favorites"
                       >
-                        <Heart size={14} fill="currentColor" color="var(--accent)" />
+                        <Heart size={14} fill="var(--accent)" color="var(--accent)" />
                       </button>
                     </div>
                   </div>
@@ -553,7 +553,7 @@ export default function SearchPage({
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
                           {favorites[tag.id] && (
-                            <Heart size={12} fill="currentColor" color="var(--accent)" />
+                            <Heart size={12} fill="var(--accent)" color="var(--accent)" />
                           )}
                           <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
                             #{hlField(tag.id, "id")}
