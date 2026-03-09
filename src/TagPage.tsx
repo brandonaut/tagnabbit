@@ -1,4 +1,4 @@
-import { ArrowLeft, Info, X } from "lucide-react"
+import { ArrowLeft, Heart, Info, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
@@ -10,9 +10,12 @@ import Tuner from "./Tuner"
 interface Props {
   tag: Tag
   onBack: () => void
+  favorites: Record<string, Tag>
+  onToggleFavorite: (tag: Tag) => void
 }
 
-export default function TagPage({ tag, onBack }: Props) {
+export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Props) {
+  const favorited = !!favorites[tag.id]
   const sheetUrl = tag.sheetMusicUrl || tag.sheetMusicAltUrl
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [mimeType, setMimeType] = useState<string>("")
@@ -74,6 +77,18 @@ export default function TagPage({ tag, onBack }: Props) {
         <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap shrink-0">
           #{tag.id}
         </span>
+        <button
+          type="button"
+          className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
+          onClick={() => onToggleFavorite(tag)}
+          aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+        >
+          <Heart
+            size={18}
+            fill={favorited ? "currentColor" : "none"}
+            color={favorited ? "var(--accent)" : "var(--text-muted)"}
+          />
+        </button>
         <button
           type="button"
           className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"

@@ -1,4 +1,5 @@
 import { proxyUrl } from "../proxyUrl"
+import { getFavoriteSheetUrls } from "./favorites"
 
 const CACHE_NAME = "tagnabbit-sheet-music"
 const LRU_KEY = "sheet-music-lru"
@@ -69,12 +70,22 @@ export async function getSheetMusic(url: string): Promise<SheetMusicData> {
   const blob = await response.blob()
   const size = blob.size
 
-  // Evict least-recently-used entries until there's room for the new entry
+  // Evict least-recently-used entries until there's room for the new entry.
+  // Favorited tags' sheet music is never evicted.
   lru = lru.filter((e) => e.url !== url)
   let totalSize = lru.reduce((sum, e) => sum + e.size, 0)
+  const favUrls = getFavoriteSheetUrls()
   while (lru.length > 0 && totalSize + size > MAX_BYTES) {
-    // biome-ignore lint/style/noNonNullAssertion: lru.length > 0 is checked in while condition
-    const evicted = lru.pop()!
+    // Find the last (LRU) entry that isn't a favorited tag's sheet music
+    let evictIdx = -1
+    for (let i = lru.length - 1; i >= 0; i--) {
+      if (!favUrls.has(lru[i].url)) {
+        evictIdx = i
+        break
+      }
+    }
+    if (evictIdx === -1) break // All remaining entries are favorites; stop evicting
+    const [evicted] = lru.splice(evictIdx, 1)
     await cache.delete(evicted.url)
     totalSize -= evicted.size
   }

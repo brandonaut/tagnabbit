@@ -1,5 +1,5 @@
 import Fuse, { type IFuseOptions } from "fuse.js"
-import { Download, Menu, Search } from "lucide-react"
+import { Download, Heart, Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { fetchAllTags, getTagCount, type SearchResult, searchTags, type Tag } from "./api/tags"
 import {
@@ -103,10 +103,19 @@ function highlightWithIndices(text: string, indices: MatchRanges): React.ReactNo
 interface Props {
   initialQuery: string
   initialResult: SearchResult | null
+  favorites: Record<string, Tag>
   onSelectTag: (tag: Tag, query: string, result: SearchResult | null) => void
+  onRemoveFavorite: (id: string) => void
 }
 
-export default function SearchPage({ initialQuery, initialResult, onSelectTag }: Props) {
+export default function SearchPage({
+  initialQuery,
+  initialResult,
+  favorites,
+  onSelectTag,
+  onRemoveFavorite,
+}: Props) {
+  const [activeTab, setActiveTab] = useState<"search" | "favorites">("search")
   const [query, setQuery] = useState(initialQuery)
   const [result, setResult] = useState<SearchResult | null>(initialResult)
   const [loading, setLoading] = useState(false)
@@ -325,78 +334,168 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
     setLocalMatches(new Map())
   }
 
+  const favoriteTags = Object.values(favorites)
+
   return (
     <div className="max-w-2xl mx-auto py-4 px-4 flex flex-col gap-4">
-      <h1 className="m-0 text-2xl font-bold top-3 left-3">Tagnabbit</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="m-0 text-2xl font-bold shrink-0">Tagnabbit</h1>
+        <div className="relative flex bg-[var(--text-muted)]/25 rounded-full p-0.5 text-sm">
+          <div
+            className="absolute top-0.5 bottom-0.5 rounded-full transition-all duration-200 bg-[var(--accent)]"
+            style={{
+              left: activeTab === "search" ? "2px" : "50%",
+              right: activeTab === "favorites" ? "2px" : "50%",
+            }}
+          />
+          <button
+            type="button"
+            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "search" ? "text-[var(--bg)]" : "text-[var(--text-muted)]"}`}
+            onClick={() => setActiveTab("search")}
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "favorites" ? "text-[var(--bg)]" : "text-[var(--text-muted)]"}`}
+            onClick={() => setActiveTab("favorites")}
+          >
+            Favorites
+          </button>
+        </div>
+      </div>
       <button
         type="button"
         className="fixed top-3 right-3 z-50 py-1 px-2 bg-transparent border-transparent leading-none"
         onClick={() => setSettingsOpen(true)}
         aria-label="Open settings"
       >
-        <Menu size={22} />
+        <Menu size={22} color="var(--accent)" />
       </button>
 
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <div className="relative flex-1">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search barbershop tags..."
-            className="w-full py-2 pl-9 pr-3 text-base border border-[var(--border)] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[var(--accent)] focus:border-transparent"
-            disabled={loading || isDownloading}
-          />
-        </div>
-        {!isLocalMode && (
-          <button type="submit" disabled={loading || !query.trim() || isDownloading}>
-            {loading ? "Searching…" : "Search"}
-          </button>
-        )}
-      </form>
-
-      {isSeeding && <p className="text-sm text-[var(--text-muted)] m-0">Loading tag database…</p>}
-
-      {isDownloading && downloadProgress && (
-        <p className="text-sm text-[var(--text-muted)] m-0">
-          Downloading… {downloadProgress.fetched.toLocaleString()}
-          {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
-          {" tags"}
-        </p>
+      {activeTab === "favorites" && (
+        <>
+          {favoriteTags.length === 0 ? (
+            <p className="text-[var(--text-muted)] text-sm">
+              No favorites yet. Open a tag and tap the heart to save it here.
+            </p>
+          ) : (
+            <ul className="list-none p-0 m-0 flex flex-col gap-2">
+              {favoriteTags.map((tag) => (
+                <li
+                  key={tag.id}
+                  className="py-3 px-4 border border-[var(--border)] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[var(--accent)]/10 hover:outline hover:outline-2 hover:outline-[var(--accent)]"
+                  onClick={() => onSelectTag(tag, "", null)}
+                  onKeyDown={(e) => e.key === "Enter" && onSelectTag(tag, "", null)}
+                >
+                  <div className="flex justify-between items-baseline gap-2">
+                    <div className="min-w-0">
+                      <span className="font-semibold">{tag.title}</span>
+                      {tag.altTitle && (
+                        <span className="text-[var(--text-muted)] text-[0.9em]">
+                          {" "}
+                          — {tag.altTitle}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
+                        #{tag.id}
+                      </span>
+                      <button
+                        type="button"
+                        className="py-[0.2em] px-[0.3em] bg-transparent border-transparent leading-none"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onRemoveFavorite(tag.id)
+                        }}
+                        aria-label="Remove from favorites"
+                      >
+                        <Heart size={14} fill="currentColor" color="var(--accent)" />
+                      </button>
+                    </div>
+                  </div>
+                  {tag.version && (
+                    <div className="text-[0.85em] text-[var(--text-muted)] italic">
+                      {tag.version}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
+                    {tag.arranger && <span>{tag.arranger}</span>}
+                    {tag.key && <span>{formatKey(tag.key)}</span>}
+                    {tag.parts && <span>{tag.parts} parts</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
 
-      {isLocalMode && (
-        <div className="flex flex-wrap gap-2 items-center">
-          <select
-            className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
-            value={filters.type}
-            onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
-          >
-            <option value="">All types</option>
-            {typeOptions.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select
-            className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
-            value={filters.parts}
-            onChange={(e) => setFilters((f) => ({ ...f, parts: e.target.value }))}
-          >
-            <option value="">All parts</option>
-            {partsOptions.map((p) => (
-              <option key={p} value={p}>
-                {p} parts
-              </option>
-            ))}
-          </select>
-          {/* Hide the learning track filter until we can actually play the learning tracks! */}
-          {/* <label className="hidden flex items-center gap-[0.375rem] text-sm cursor-pointer text-[#aaa]">
+      {activeTab === "search" && (
+        <>
+          <form onSubmit={handleSearch} className="flex gap-2">
+            <div className="relative flex-1">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search barbershop tags..."
+                className="w-full py-2 pl-9 pr-3 text-base border border-[var(--border)] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[var(--accent)] focus:border-transparent"
+                disabled={loading || isDownloading}
+              />
+            </div>
+            {!isLocalMode && (
+              <button type="submit" disabled={loading || !query.trim() || isDownloading}>
+                {loading ? "Searching…" : "Search"}
+              </button>
+            )}
+          </form>
+
+          {isSeeding && (
+            <p className="text-sm text-[var(--text-muted)] m-0">Loading tag database…</p>
+          )}
+
+          {isDownloading && downloadProgress && (
+            <p className="text-sm text-[var(--text-muted)] m-0">
+              Downloading… {downloadProgress.fetched.toLocaleString()}
+              {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
+              {" tags"}
+            </p>
+          )}
+
+          {isLocalMode && (
+            <div className="flex flex-wrap gap-2 items-center">
+              <select
+                className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
+                value={filters.type}
+                onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
+              >
+                <option value="">All types</option>
+                {typeOptions.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
+                value={filters.parts}
+                onChange={(e) => setFilters((f) => ({ ...f, parts: e.target.value }))}
+              >
+                <option value="">All parts</option>
+                {partsOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p} parts
+                  </option>
+                ))}
+              </select>
+              {/* Hide the learning track filter until we can actually play the learning tracks! */}
+              {/* <label className="hidden flex items-center gap-[0.375rem] text-sm cursor-pointer text-[#aaa]">
             <input
               type="checkbox"
               checked={filters.learningTracks}
@@ -404,81 +503,88 @@ export default function SearchPage({ initialQuery, initialResult, onSelectTag }:
             />
             Learning tracks
           </label> */}
-          <button type="button" className="ml-auto text-sm" onClick={handleSurpriseMe}>
-            Surprise Me!
-          </button>
-        </div>
-      )}
+              <button type="button" className="ml-auto text-sm" onClick={handleSurpriseMe}>
+                Surprise Me!
+              </button>
+            </div>
+          )}
 
-      {!isLocalMode && !isDownloading && !isSeeding && (
-        <button type="button" className="self-start text-sm" onClick={handleDownloadAll}>
-          Download all tags for instant offline search
-        </button>
-      )}
+          {!isLocalMode && !isDownloading && !isSeeding && (
+            <button type="button" className="self-start text-sm" onClick={handleDownloadAll}>
+              Download all tags for instant offline search
+            </button>
+          )}
 
-      {error && (
-        <p className="text-[#f87171] m-0" role="alert">
-          {error}
-        </p>
-      )}
+          {error && (
+            <p className="text-[#f87171] m-0" role="alert">
+              {error}
+            </p>
+          )}
 
-      {result && result.tags.length > 0 && (
-        <>
-          <p className="text-sm text-[var(--text-muted)] m-0">
-            {isLocalMode
-              ? `${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`
-              : `${result.available.toLocaleString()} tags found, showing ${result.count}`}
-          </p>
-          <ul className="list-none p-0 m-0 flex flex-col gap-2">
-            {result.tags.map((tag) => {
-              const fm = localMatches.get(tag.id)
-              const hlField = (text: string, field: string) =>
-                fm?.[field] ? highlightWithIndices(text, fm[field]) : highlight(text, query)
+          {result && result.tags.length > 0 && (
+            <>
+              <p className="text-sm text-[var(--text-muted)] m-0">
+                {isLocalMode
+                  ? `${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`
+                  : `${result.available.toLocaleString()} tags found, showing ${result.count}`}
+              </p>
+              <ul className="list-none p-0 m-0 flex flex-col gap-2">
+                {result.tags.map((tag) => {
+                  const fm = localMatches.get(tag.id)
+                  const hlField = (text: string, field: string) =>
+                    fm?.[field] ? highlightWithIndices(text, fm[field]) : highlight(text, query)
 
-              return (
-                <li
-                  key={tag.id}
-                  className="py-3 px-4 border border-[var(--border)] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[var(--accent)]/10 hover:outline hover:outline-2 hover:outline-[var(--accent)] focus:bg-[var(--accent)]/10 focus:outline focus:outline-2 focus:outline-[var(--accent)]"
-                  onClick={() => onSelectTag(tag, query, result)}
-                  onKeyDown={(e) => e.key === "Enter" && onSelectTag(tag, query, result)}
-                >
-                  <div className="flex justify-between items-baseline gap-2">
-                    <div className="min-w-0">
-                      <span className="font-semibold">{hlField(tag.title, "title")}</span>
-                      {tag.altTitle && (
-                        <span className="text-[var(--text-muted)] text-[0.9em]">
-                          {" "}
-                          — {hlField(tag.altTitle, "altTitle")}
-                        </span>
+                  return (
+                    <li
+                      key={tag.id}
+                      className="py-3 px-4 border border-[var(--border)] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[var(--accent)]/10 hover:outline hover:outline-2 hover:outline-[var(--accent)] focus:bg-[var(--accent)]/10 focus:outline focus:outline-2 focus:outline-[var(--accent)]"
+                      onClick={() => onSelectTag(tag, query, result)}
+                      onKeyDown={(e) => e.key === "Enter" && onSelectTag(tag, query, result)}
+                    >
+                      <div className="flex justify-between items-baseline gap-2">
+                        <div className="min-w-0">
+                          <span className="font-semibold">{hlField(tag.title, "title")}</span>
+                          {tag.altTitle && (
+                            <span className="text-[var(--text-muted)] text-[0.9em]">
+                              {" "}
+                              — {hlField(tag.altTitle, "altTitle")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {favorites[tag.id] && (
+                            <Heart size={12} fill="currentColor" color="var(--accent)" />
+                          )}
+                          <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
+                            #{hlField(tag.id, "id")}
+                          </span>
+                        </div>
+                      </div>
+                      {tag.version && (
+                        <div className="text-[0.85em] text-[var(--text-muted)] italic">
+                          {hlField(tag.version, "version")}
+                        </div>
                       )}
-                    </div>
-                    <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap shrink-0">
-                      #{hlField(tag.id, "id")}
-                    </span>
-                  </div>
-                  {tag.version && (
-                    <div className="text-[0.85em] text-[var(--text-muted)] italic">
-                      {hlField(tag.version, "version")}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
-                    {tag.arranger && <span>{hlField(tag.arranger, "arranger")}</span>}
-                    {tag.key && <span>{formatKey(tag.key)}</span>}
-                    {tag.parts && <span>{tag.parts} parts</span>}
-                    <span className="inline-flex items-center gap-1">
-                      <Download size={11} />
-                      {formatDownloads(tag.downloaded)}
-                    </span>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </>
-      )}
+                      <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
+                        {tag.arranger && <span>{hlField(tag.arranger, "arranger")}</span>}
+                        {tag.key && <span>{formatKey(tag.key)}</span>}
+                        {tag.parts && <span>{tag.parts} parts</span>}
+                        <span className="inline-flex items-center gap-1">
+                          <Download size={11} />
+                          {formatDownloads(tag.downloaded)}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </>
+          )}
 
-      {result && result.tags.length === 0 && query.trim() && (
-        <p className="text-[var(--text-muted)] text-sm">No tags found for "{query.trim()}".</p>
+          {result && result.tags.length === 0 && query.trim() && (
+            <p className="text-[var(--text-muted)] text-sm">No tags found for "{query.trim()}".</p>
+          )}
+        </>
       )}
 
       <SettingsDrawer
