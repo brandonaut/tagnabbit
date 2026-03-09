@@ -54,7 +54,7 @@ export default function SettingsDrawer({
             onClick={onClose}
             aria-label="Close settings"
           >
-            <X size={16} />
+            <X size={16} color="var(--text-muted)" />
           </button>
         </div>
 

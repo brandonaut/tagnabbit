@@ -370,7 +370,7 @@ export default function SearchPage({
         onClick={() => setSettingsOpen(true)}
         aria-label="Open settings"
       >
-        <Menu size={22} color="var(--accent)" />
+        <Menu size={22} color="var(--text-muted)" />
       </button>
 
       {activeTab === "favorites" && (
