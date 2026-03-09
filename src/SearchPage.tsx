@@ -1,7 +1,7 @@
 import Fuse, { type IFuseOptions } from "fuse.js"
 import { Download, Heart, Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { fetchAllTags, getTagCount, type SearchResult, searchTags, type Tag } from "./api/tags"
+import { fetchAllTags, getTagCount, type SearchResult, type Tag } from "./api/tags"
 import {
   getCachedAllTags,
   getTagCacheMeta,
@@ -118,7 +118,6 @@ export default function SearchPage({
   const [activeTab, setActiveTab] = useState<"search" | "favorites">("search")
   const [query, setQuery] = useState(initialQuery)
   const [result, setResult] = useState<SearchResult | null>(initialResult)
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [localTags, setLocalTags] = useState<Tag[] | null>(null)
@@ -151,8 +150,6 @@ export default function SearchPage({
   // True when showing Surprise Me results (no query). Used to prevent the
   // fuzzy search effect from clearing the result on remount.
   const isSurpriseRef = useRef(!initialQuery && !!initialResult)
-  const isLocalMode = localTags !== null
-
   // Load local tag database on mount, then check staleness in background
   useEffect(() => {
     let cancelled = false
@@ -276,24 +273,6 @@ export default function SearchPage({
       ),
     )
   }, [query, filters])
-
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    if (isLocalMode) return
-    const q = query.trim()
-    if (!q) return
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await searchTags(q)
-      setResult(data)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Search failed")
-      setResult(null)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   async function handleDownloadAll() {
     setIsDownloading(true)
@@ -434,7 +413,7 @@ export default function SearchPage({
 
       {activeTab === "search" && (
         <>
-          <form onSubmit={handleSearch} className="flex gap-2">
+          <form className="flex gap-2">
             <div className="relative flex-1">
               <Search
                 size={16}
@@ -446,14 +425,9 @@ export default function SearchPage({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search barbershop tags..."
                 className="w-full py-2 pl-9 pr-3 text-base border border-[var(--border)] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[var(--accent)] focus:border-transparent"
-                disabled={loading || isDownloading}
+                disabled={isDownloading}
               />
             </div>
-            {!isLocalMode && (
-              <button type="submit" disabled={loading || !query.trim() || isDownloading}>
-                {loading ? "Searching…" : "Search"}
-              </button>
-            )}
           </form>
 
           {isSeeding && (
@@ -468,7 +442,7 @@ export default function SearchPage({
             </p>
           )}
 
-          {isLocalMode && (
+          {localTags !== null && (
             <div className="flex flex-wrap gap-2 items-center">
               <select
                 className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
@@ -509,12 +483,6 @@ export default function SearchPage({
             </div>
           )}
 
-          {!isLocalMode && !isDownloading && !isSeeding && (
-            <button type="button" className="self-start text-sm" onClick={handleDownloadAll}>
-              Download all tags for instant offline search
-            </button>
-          )}
-
           {error && (
             <p className="text-[#f87171] m-0" role="alert">
               {error}
@@ -524,9 +492,7 @@ export default function SearchPage({
           {result && result.tags.length > 0 && (
             <>
               <p className="text-sm text-[var(--text-muted)] m-0">
-                {isLocalMode
-                  ? `${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`
-                  : `${result.available.toLocaleString()} tags found, showing ${result.count}`}
+                {`${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`}
               </p>
               <ul className="list-none p-0 m-0 flex flex-col gap-2">
                 {result.tags.map((tag) => {
