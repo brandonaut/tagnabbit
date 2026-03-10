@@ -33,9 +33,10 @@ const ENHARMONIC: Record<string, string> = {
 
 interface Props {
   defaultNote: string
+  visible?: boolean
 }
 
-export default function PitchPipe({ defaultNote }: Props) {
+export default function PitchPipe({ defaultNote, visible = true }: Props) {
   const [selectedNote, setSelectedNote] = useState(() => ENHARMONIC[defaultNote] ?? defaultNote)
   const [pickerOpen, setPickerOpen] = useState(false)
   const audioRef = useRef<{ ctx: AudioContext; osc: OscillatorNode; gain: GainNode } | null>(null)
@@ -88,46 +89,54 @@ export default function PitchPipe({ defaultNote }: Props) {
   }
 
   return (
-    <div className="fixed bottom-3 left-3 opacity-90 z-50" ref={containerRef}>
-      {pickerOpen && (
-        <div className="absolute bottom-[calc(100%+0.5rem)] left-0 grid grid-cols-[repeat(4,2.75rem)] gap-1 bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg p-2 z-10">
-          {CHROMATIC_NOTES.map((note) => (
-            <button
-              key={note}
-              type="button"
-              className={`text-[0.85rem] py-[0.35em] w-full text-center${note === selectedNote ? " bg-[#646cff] border-[#646cff] text-white" : ""}`}
-              onClick={() => {
-                setSelectedNote(note)
-                setPickerOpen(false)
-              }}
-            >
-              {note}
-            </button>
-          ))}
+    <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only, not an interactive element */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only, not an interactive element */}
+      <div
+        className={`fixed bottom-3 left-3 opacity-90 z-50 transition-transform duration-300 ${visible ? "translate-y-0" : "translate-y-24"}`}
+        ref={containerRef}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {pickerOpen && (
+          <div className="absolute bottom-[calc(100%+0.5rem)] left-0 grid grid-cols-[repeat(4,2.75rem)] gap-1 bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg p-2 z-10">
+            {CHROMATIC_NOTES.map((note) => (
+              <button
+                key={note}
+                type="button"
+                className={`text-[0.85rem] py-[0.35em] w-full text-center${note === selectedNote ? " bg-[#646cff] border-[#646cff] text-white" : ""}`}
+                onClick={() => {
+                  setSelectedNote(note)
+                  setPickerOpen(false)
+                }}
+              >
+                {note}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex">
+          <button
+            type="button"
+            className="text-base select-none rounded-l-[6px] rounded-r-none border-r-0 active:bg-[#646cff] active:border-[#646cff] active:text-white"
+            onMouseDown={startTone}
+            onMouseUp={stopTone}
+            onMouseLeave={stopTone}
+            onTouchStart={startTone}
+            onTouchEnd={stopTone}
+            onTouchCancel={stopTone}
+          >
+            {selectedNote}
+          </button>
+          <button
+            type="button"
+            className="py-[0.6em] px-[0.6em] rounded-l-none rounded-r-[6px] leading-none"
+            onClick={() => setPickerOpen((o) => !o)}
+            aria-label="Change pitch"
+          >
+            <ChevronDown size={14} />
+          </button>
         </div>
-      )}
-      <div className="flex">
-        <button
-          type="button"
-          className="text-base select-none rounded-l-[6px] rounded-r-none border-r-0 active:bg-[#646cff] active:border-[#646cff] active:text-white"
-          onMouseDown={startTone}
-          onMouseUp={stopTone}
-          onMouseLeave={stopTone}
-          onTouchStart={startTone}
-          onTouchEnd={stopTone}
-          onTouchCancel={stopTone}
-        >
-          {selectedNote}
-        </button>
-        <button
-          type="button"
-          className="py-[0.6em] px-[0.6em] rounded-l-none rounded-r-[6px] leading-none"
-          onClick={() => setPickerOpen((o) => !o)}
-          aria-label="Change pitch"
-        >
-          <ChevronDown size={14} />
-        </button>
       </div>
-    </div>
+    </>
   )
 }

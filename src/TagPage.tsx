@@ -22,6 +22,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [uiVisible, setUiVisible] = useState(true)
 
   useEffect(() => {
     if (!sheetUrl) return
@@ -62,43 +63,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
   const isPdf = mimeType === "application/pdf"
 
   return (
-    <div className="flex flex-col gap-3 p-4 pb-20">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="shrink-0 flex items-center gap-1 text-[0.9rem]"
-          onClick={onBack}
-        >
-          <ArrowLeft size={16} />
-        </button>
-        <span className="flex-1 text-[0.95rem] font-semibold overflow-hidden whitespace-nowrap text-ellipsis">
-          {tag.title}
-        </span>
-        <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap shrink-0">
-          #{tag.id}
-        </span>
-        <button
-          type="button"
-          className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
-          onClick={() => onToggleFavorite(tag)}
-          aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
-        >
-          <Heart
-            size={18}
-            fill={favorited ? "var(--accent)" : "none"}
-            color={favorited ? "var(--accent)" : "var(--text-muted)"}
-          />
-        </button>
-        <button
-          type="button"
-          className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
-          onClick={() => setInfoOpen(true)}
-          aria-label="Tag information"
-        >
-          <Info size={18} color="var(--text-muted)" />
-        </button>
-      </div>
-
+    <div className="relative pb-20">
       {infoOpen && (
         <>
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop overlay, dialog has Escape key via focus */}
@@ -190,43 +155,143 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
         </>
       )}
 
-      {!sheetUrl && <p className="text-[var(--text-muted)]">No sheet music available.</p>}
+      {/* Header in normal flow when sheet music isn't loaded yet */}
+      {!objectUrl && (
+        <div className="p-4 flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="shrink-0 flex items-center gap-1 text-[0.9rem]"
+              onClick={onBack}
+            >
+              <ArrowLeft size={16} />
+            </button>
+            <div className="flex-1 min-w-0">
+              <div className="text-[0.95rem] font-semibold overflow-hidden whitespace-nowrap text-ellipsis">
+                {tag.title}
+                {tag.altTitle && <span className="font-normal"> – {tag.altTitle}</span>}
+              </div>
+              {tag.arranger && (
+                <div className="text-[0.75rem] text-[var(--text-muted)] overflow-hidden whitespace-nowrap text-ellipsis">
+                  {tag.arranger}
+                </div>
+              )}
+            </div>
+            <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap shrink-0">
+              #{tag.id}
+            </span>
+            <button
+              type="button"
+              className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
+              onClick={() => onToggleFavorite(tag)}
+              aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+            >
+              <Heart
+                size={18}
+                fill={favorited ? "var(--accent)" : "none"}
+                color={favorited ? "var(--accent)" : "var(--text-muted)"}
+              />
+            </button>
+            <button
+              type="button"
+              className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
+              onClick={() => setInfoOpen(true)}
+              aria-label="Tag information"
+            >
+              <Info size={18} color="var(--text-muted)" />
+            </button>
+          </div>
 
-      {sheetUrl && loading && <p className="text-[var(--text-muted)]">Loading sheet music…</p>}
-
-      {sheetUrl && error && (
-        <div>
-          <p className="text-[#f87171] m-0" role="alert">
-            {error}
-          </p>
-          <a href={sheetUrl} target="_blank" rel="noopener noreferrer">
-            Open sheet music externally
-          </a>
+          {!sheetUrl && <p className="text-[var(--text-muted)]">No sheet music available.</p>}
+          {sheetUrl && loading && <p className="text-[var(--text-muted)]">Loading sheet music…</p>}
+          {sheetUrl && error && (
+            <div>
+              <p className="text-[#f87171] m-0" role="alert">
+                {error}
+              </p>
+              <a href={sheetUrl} target="_blank" rel="noopener noreferrer">
+                Open sheet music externally
+              </a>
+            </div>
+          )}
         </div>
       )}
 
+      {/* Sheet music with overlaid header */}
       {objectUrl && (
-        <div className="flex flex-col gap-2">
-          <div className="relative -mx-4">
+        <>
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: tap-to-toggle UI overlay */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: tap-to-toggle UI overlay */}
+          <div className="relative" onClick={() => setUiVisible((v) => !v)}>
             {isImage ? (
-              <img
-                src={objectUrl}
-                alt={`Sheet music for ${tag.title}`}
-                className="w-full h-auto border border-[var(--border)] rounded-md"
-              />
+              <img src={objectUrl} alt={`Sheet music for ${tag.title}`} className="w-full h-auto" />
             ) : isPdf ? (
               <PdfViewer url={objectUrl} title={`Sheet music for ${tag.title}`} />
             ) : (
               <iframe
                 src={objectUrl}
                 title={`Sheet music for ${tag.title}`}
-                className="w-full h-[80vh] border border-[var(--border)] rounded-md"
+                className="w-full h-[80vh]"
               />
             )}
-            <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : "C"} />
-            <Tuner tagKey={tag.key ? formatKey(tag.key) : "C"} />
+
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only */}
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only */}
+            <div
+              className={`absolute top-0 left-0 right-0 z-50 transition-transform duration-300 ${uiVisible ? "translate-y-0" : "-translate-y-full"}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-gradient-to-b from-black/75 to-transparent px-4 pt-3 pb-12">
+                <div className="flex items-center gap-2 text-white">
+                  <button
+                    type="button"
+                    className="shrink-0 flex items-center gap-1 text-[0.9rem] bg-transparent border-transparent"
+                    onClick={onBack}
+                  >
+                    <ArrowLeft size={16} />
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[0.95rem] font-semibold overflow-hidden whitespace-nowrap text-ellipsis drop-shadow">
+                      {tag.title}
+                      {tag.altTitle && <span className="font-normal"> – {tag.altTitle}</span>}
+                    </div>
+                    {tag.arranger && (
+                      <div className="text-[0.75rem] text-white/60 overflow-hidden whitespace-nowrap text-ellipsis">
+                        {tag.arranger}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[0.8rem] text-white/60 whitespace-nowrap shrink-0">
+                    #{tag.id}
+                  </span>
+                  <button
+                    type="button"
+                    className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
+                    onClick={() => onToggleFavorite(tag)}
+                    aria-label={favorited ? "Remove from favorites" : "Add to favorites"}
+                  >
+                    <Heart
+                      size={18}
+                      fill={favorited ? "var(--accent)" : "none"}
+                      color={favorited ? "var(--accent)" : "rgba(255,255,255,0.7)"}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className="py-[0.3em] px-[0.5em] bg-transparent border-transparent shrink-0 leading-none"
+                    onClick={() => setInfoOpen(true)}
+                    aria-label="Tag information"
+                  >
+                    <Info size={18} color="rgba(255,255,255,0.7)" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} />
+            <Tuner tagKey={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} />
           </div>
-        </div>
+        </>
       )}
     </div>
   )

@@ -97,9 +97,10 @@ interface PitchInfo {
 
 interface Props {
   tagKey: string
+  visible?: boolean
 }
 
-export default function Tuner({ tagKey }: Props) {
+export default function Tuner({ tagKey, visible = true }: Props) {
   const [active, setActive] = useState(false)
   const [pitch, setPitch] = useState<PitchInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -242,7 +243,12 @@ export default function Tuner({ tagKey }: Props) {
   const centsColor = pitch ? (absC <= 10 ? "#4ade80" : absC <= 25 ? "#facc15" : "#f87171") : "#888"
 
   return (
-    <div className="fixed bottom-3 right-3 opacity-90 z-50 flex flex-col items-end gap-1">
+    // biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only
+    // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only
+    <div
+      className={`fixed bottom-3 right-3 opacity-90 z-50 flex flex-col items-end gap-1 transition-transform duration-300 ${visible ? "translate-y-0" : "translate-y-24"}`}
+      onClick={(e) => e.stopPropagation()}
+    >
       {active && (
         <div className="bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg py-[0.6rem] px-3 min-w-[110px] flex flex-col items-center gap-[0.2rem] z-10">
           {pitch ? (
