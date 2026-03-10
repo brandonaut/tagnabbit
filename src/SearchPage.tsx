@@ -31,7 +31,8 @@ const FUSE_OPTIONS: IFuseOptions<Tag> = {
   ],
   includeMatches: true,
   includeScore: true,
-  threshold: 0.4,
+  findAllMatches: false,
+  threshold: 0.3,
   minMatchCharLength: 2,
   ignoreLocation: true,
 }
