@@ -29,7 +29,6 @@ const FUSE_OPTIONS: IFuseOptions<Tag> = {
     { name: "id", weight: 4 },
     { name: "title", weight: 3 },
     { name: "altTitle", weight: 2 },
-    { name: "version", weight: 2 },
     { name: "arranger", weight: 1 },
   ],
   includeMatches: true,
@@ -76,6 +75,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
   } | null>(null)
   const [isSeeding, setIsSeeding] = useState(false)
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false)
+  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery)
   const [localMatches, setLocalMatches] = useState<Map<string, FieldMatches>>(new Map())
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [filters, setFilters] = useState({ type: "", parts: "", learningTracks: false })
@@ -169,6 +169,12 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
     }
   }, [isDownloading])
 
+  // Debounce the query so Fuse doesn't run on every keystroke
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query), 150)
+    return () => clearTimeout(id)
+  }, [query])
+
   // Build Fuse index when local tags are loaded
   useEffect(() => {
     if (!localTags) {
@@ -183,7 +189,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
     const fuse = fuseRef.current
     if (!fuse) return
 
-    const q = query.trim()
+    const q = debouncedQuery.trim()
     if (!q) {
       if (isSurpriseRef.current) return // Preserve Surprise Me results on remount
       setResult(null)
@@ -219,7 +225,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
         ]),
       ),
     )
-  }, [query, filters])
+  }, [debouncedQuery, filters])
 
   async function handleDownloadAll() {
     setIsDownloading(true)
