@@ -87,8 +87,9 @@ export async function getTagCount(): Promise<number> {
 export async function fetchAllTags(
   onProgress: (fetched: number, total: number) => void,
 ): Promise<Tag[]> {
+  const client = "tagnabbit"
   const firstResponse = await fetch(
-    proxyUrl(`https://www.barbershoptags.com/api.php?n=${PAGE_SIZE}&start=1`),
+    proxyUrl(`https://www.barbershoptags.com/api.php?n=${PAGE_SIZE}&start=1&client=${client}`),
   )
   if (!firstResponse.ok) throw new Error(`Request failed: ${firstResponse.status}`)
 
@@ -100,7 +101,9 @@ export async function fetchAllTags(
   let start = PAGE_SIZE + 1
   while (allTags.length < total) {
     const response = await fetch(
-      proxyUrl(`https://www.barbershoptags.com/api.php?n=${PAGE_SIZE}&start=${start}`),
+      proxyUrl(
+        `https://www.barbershoptags.com/api.php?n=${PAGE_SIZE}&start=${start}&client=${client}`,
+      ),
     )
     if (!response.ok) throw new Error(`Request failed: ${response.status}`)
 
