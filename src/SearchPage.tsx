@@ -1,5 +1,5 @@
 import Fuse, { type IFuseOptions } from "fuse.js"
-import { Download, Heart, Menu, Search } from "lucide-react"
+import { Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { fetchAllTags, getTagCount, type SearchResult, type Tag } from "./api/tags"
 import {
@@ -9,20 +9,8 @@ import {
   type TagCacheMeta,
   touchTagCache,
 } from "./cache/tagDatabase"
-import { formatKey } from "./formatKey"
 import SettingsDrawer from "./SettingsDrawer"
-
-function formatDownloads(n: number): string {
-  if (n < 100) return String(n)
-  if (n < 1000) return `${Math.floor(n / 100) * 100}+`
-  if (n < 10000) return `${(Math.floor(n / 100) / 10).toFixed(1).replace(/\.0$/, "")}k+`
-  return `${Math.floor(n / 1000)}k+`
-}
-
-// Character ranges [start, end] (inclusive) from Fuse match indices
-type MatchRanges = ReadonlyArray<readonly [number, number]>
-// Per-field match ranges for one tag, keyed by field name
-type FieldMatches = Record<string, MatchRanges>
+import { type FieldMatches, TagListItem } from "./TagListItem"
 
 const FUSE_LIMIT = 100
 const SURPRISE_COUNT = 7
@@ -66,55 +54,14 @@ function buildFuseQuery(q: string) {
   }
 }
 
-// Highlight a substring match (used in API mode)
-function highlight(text: string, query: string): React.ReactNode {
-  const q = query.trim().toLowerCase()
-  if (!q || !text) return text
-
-  const parts: React.ReactNode[] = []
-  const lower = text.toLowerCase()
-  let last = 0
-  let idx = lower.indexOf(q)
-
-  while (idx !== -1) {
-    if (idx > last) parts.push(text.slice(last, idx))
-    parts.push(<mark key={idx}>{text.slice(idx, idx + q.length)}</mark>)
-    last = idx + q.length
-    idx = lower.indexOf(q, last)
-  }
-  if (last < text.length) parts.push(text.slice(last))
-  return <>{parts}</>
-}
-
-// Highlight using Fuse character indices (used in local mode)
-function highlightWithIndices(text: string, indices: MatchRanges): React.ReactNode {
-  if (!indices.length) return text
-  const parts: React.ReactNode[] = []
-  let last = 0
-  for (const [start, end] of indices) {
-    if (start > last) parts.push(text.slice(last, start))
-    parts.push(<mark key={start}>{text.slice(start, end + 1)}</mark>)
-    last = end + 1
-  }
-  if (last < text.length) parts.push(text.slice(last))
-  return <>{parts}</>
-}
-
 interface Props {
   initialQuery: string
   initialResult: SearchResult | null
   favorites: Record<string, Tag>
   onSelectTag: (tag: Tag, query: string, result: SearchResult | null) => void
-  onRemoveFavorite: (id: string) => void
 }
 
-export default function SearchPage({
-  initialQuery,
-  initialResult,
-  favorites,
-  onSelectTag,
-  onRemoveFavorite,
-}: Props) {
+export default function SearchPage({ initialQuery, initialResult, favorites, onSelectTag }: Props) {
   const [activeTab, setActiveTab] = useState<"search" | "favorites">("search")
   const [query, setQuery] = useState(initialQuery)
   const [result, setResult] = useState<SearchResult | null>(initialResult)
@@ -352,64 +299,23 @@ export default function SearchPage({
         <Menu size={22} color="var(--text-muted)" />
       </button>
 
-      {activeTab === "favorites" && (
-        <>
-          {favoriteTags.length === 0 ? (
-            <p className="text-[var(--text-muted)] text-sm">
-              No favorites yet. Open a tag and tap the heart to save it here.
-            </p>
-          ) : (
-            <ul className="list-none p-0 m-0 flex flex-col gap-2">
-              {favoriteTags.map((tag) => (
-                <li
-                  key={tag.id}
-                  className="py-3 px-4 border border-[var(--border)] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[var(--accent)]/10 hover:outline hover:outline-2 hover:outline-[var(--accent)]"
-                  onClick={() => onSelectTag(tag, "", null)}
-                  onKeyDown={(e) => e.key === "Enter" && onSelectTag(tag, "", null)}
-                >
-                  <div className="flex justify-between items-baseline gap-2">
-                    <div className="min-w-0">
-                      <span className="font-semibold">{tag.title}</span>
-                      {tag.altTitle && (
-                        <span className="text-[var(--text-muted)] text-[0.9em]">
-                          {" "}
-                          — {tag.altTitle}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
-                        #{tag.id}
-                      </span>
-                      <button
-                        type="button"
-                        className="py-[0.2em] px-[0.3em] bg-transparent border-transparent leading-none"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onRemoveFavorite(tag.id)
-                        }}
-                        aria-label="Remove from favorites"
-                      >
-                        <Heart size={14} fill="var(--accent)" color="var(--accent)" />
-                      </button>
-                    </div>
-                  </div>
-                  {tag.version && (
-                    <div className="text-[0.85em] text-[var(--text-muted)] italic">
-                      {tag.version}
-                    </div>
-                  )}
-                  <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
-                    {tag.arranger && <span>{tag.arranger}</span>}
-                    {tag.key && <span>{formatKey(tag.key)}</span>}
-                    {tag.parts && <span>{tag.parts} parts</span>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+      {activeTab === "favorites" &&
+        (favoriteTags.length === 0 ? (
+          <p className="text-[var(--text-muted)] text-sm">
+            No favorites yet. Open a tag and tap the heart to save it here.
+          </p>
+        ) : (
+          <ul className="list-none p-0 m-0 flex flex-col gap-2">
+            {favoriteTags.map((tag) => (
+              <TagListItem
+                key={tag.id}
+                tag={tag}
+                onClick={() => onSelectTag(tag, "", null)}
+                isFavorited
+              />
+            ))}
+          </ul>
+        ))}
 
       {activeTab === "search" && (
         <>
@@ -495,54 +401,16 @@ export default function SearchPage({
                 {`${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`}
               </p>
               <ul className="list-none p-0 m-0 flex flex-col gap-2">
-                {result.tags.map((tag) => {
-                  const fm = localMatches.get(tag.id)
-                  const hlField = (text: string, field: string) =>
-                    fm?.[field] ? highlightWithIndices(text, fm[field]) : highlight(text, query)
-
-                  return (
-                    <li
-                      key={tag.id}
-                      className="py-3 px-4 border border-[var(--border)] rounded-lg cursor-pointer transition-colors duration-150 hover:bg-[var(--accent)]/10 hover:outline hover:outline-2 hover:outline-[var(--accent)] focus:bg-[var(--accent)]/10 focus:outline focus:outline-2 focus:outline-[var(--accent)]"
-                      onClick={() => onSelectTag(tag, query, result)}
-                      onKeyDown={(e) => e.key === "Enter" && onSelectTag(tag, query, result)}
-                    >
-                      <div className="flex justify-between items-baseline gap-2">
-                        <div className="min-w-0">
-                          <span className="font-semibold">{hlField(tag.title, "title")}</span>
-                          {tag.altTitle && (
-                            <span className="text-[var(--text-muted)] text-[0.9em]">
-                              {" "}
-                              — {hlField(tag.altTitle, "altTitle")}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {favorites[tag.id] && (
-                            <Heart size={12} fill="var(--accent)" color="var(--accent)" />
-                          )}
-                          <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
-                            #{hlField(tag.id, "id")}
-                          </span>
-                        </div>
-                      </div>
-                      {tag.version && (
-                        <div className="text-[0.85em] text-[var(--text-muted)] italic">
-                          {hlField(tag.version, "version")}
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-3 text-[0.8rem] text-[var(--text-muted)]">
-                        {tag.arranger && <span>{hlField(tag.arranger, "arranger")}</span>}
-                        {tag.key && <span>{formatKey(tag.key)}</span>}
-                        {tag.parts && <span>{tag.parts} parts</span>}
-                        <span className="inline-flex items-center gap-1">
-                          <Download size={11} />
-                          {formatDownloads(tag.downloaded)}
-                        </span>
-                      </div>
-                    </li>
-                  )
-                })}
+                {result.tags.map((tag) => (
+                  <TagListItem
+                    key={tag.id}
+                    tag={tag}
+                    onClick={() => onSelectTag(tag, query, result)}
+                    fieldMatches={localMatches.get(tag.id)}
+                    query={query}
+                    isFavorited={!!favorites[tag.id]}
+                  />
+                ))}
               </ul>
             </>
           )}
