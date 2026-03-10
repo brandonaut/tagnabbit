@@ -177,6 +177,14 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
                   <dd className="m-0">{tag.downloaded.toLocaleString()}</dd>
                 </>
               )}
+              {tag.posted && (
+                <>
+                  <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
+                    Posted
+                  </dt>
+                  <dd className="m-0">{tag.posted}</dd>
+                </>
+              )}
             </dl>
           </div>
         </>

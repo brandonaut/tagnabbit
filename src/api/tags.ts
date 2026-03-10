@@ -9,6 +9,7 @@ export interface Tag {
   parts: string
   type: string
   arranger: string
+  posted: string
   downloaded: number
   rating: string
   ratingCount: string
@@ -48,6 +49,7 @@ function parseTagsXml(xml: string): SearchResult {
     parts: getText(el, "Parts"),
     type: getText(el, "Type"),
     arranger: getText(el, "Arranger"),
+    posted: getText(el, "Posted"),
     downloaded: parseInt(getText(el, "Downloaded") || "0", 10),
     rating: getText(el, "Rating"),
     ratingCount: getText(el, "RatingCount"),
