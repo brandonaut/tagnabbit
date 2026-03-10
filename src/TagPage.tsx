@@ -169,14 +169,12 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
                   <dd className="m-0">{tag.type}</dd>
                 </>
               )}
-              {tag.ratingCount && tag.ratingCount !== "0" && (
+              {!!tag.downloaded && (
                 <>
                   <dt className="text-[var(--text-muted)] text-xs uppercase tracking-[0.05em] self-center">
-                    Rating
+                    Downloads
                   </dt>
-                  <dd className="m-0">
-                    {tag.rating} / 5 ({tag.ratingCount} ratings)
-                  </dd>
+                  <dd className="m-0">{tag.downloaded.toLocaleString()}</dd>
                 </>
               )}
             </dl>
