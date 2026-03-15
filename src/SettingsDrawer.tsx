@@ -1,5 +1,6 @@
 import { X } from "lucide-react"
 import { useEffect } from "react"
+import githubLogo from "./assets/github.svg"
 import type { TagCacheMeta } from "./cache/tagDatabase"
 
 const APP_VERSION = "0.0.0"
@@ -105,8 +106,10 @@ export default function SettingsDrawer({
             href="https://github.com/brandonaut/tagnabbit"
             target="_blank"
             rel="noopener noreferrer"
+            className="flex items-center gap-1.5"
           >
-            GitHub
+            <img src={githubLogo} alt="GitHub" className="size-4 invert" />
+            brandonaut/tagnabbit
           </a>
           <p className="text-sm text-[var(--text-muted)] m-0 leading-relaxed">
             Tags sourced from{" "}
