@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import type { SearchResult, Tag } from "./api/tags.ts"
-import { getFavorites, removeFavorite, toggleFavorite } from "./cache/favorites.ts"
+import { getFavorites, toggleFavorite } from "./cache/favorites.ts"
 import PWABadge from "./PWABadge.tsx"
 import SearchPage from "./SearchPage.tsx"
 import TagPage from "./TagPage.tsx"
@@ -26,11 +26,6 @@ export default function App() {
     setFavorites(getFavorites())
   }
 
-  function handleRemoveFavorite(id: string) {
-    removeFavorite(id)
-    setFavorites(getFavorites())
-  }
-
   return (
     <>
       {selectedTag ? (
@@ -50,7 +45,6 @@ export default function App() {
             setSelectedTag(tag)
             history.pushState({}, "")
           }}
-          onRemoveFavorite={handleRemoveFavorite}
         />
       )}
       <PWABadge />

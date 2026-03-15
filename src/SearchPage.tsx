@@ -10,7 +10,7 @@ import {
   touchTagCache,
 } from "./cache/tagDatabase"
 import SettingsDrawer from "./SettingsDrawer"
-import { type FieldMatches, TagListItem } from "./TagListItem"
+import { type FieldMatches, type MatchRanges, TagListItem } from "./TagListItem"
 
 const FUSE_LIMIT = 100
 const SURPRISE_COUNT = 7
