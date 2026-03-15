@@ -1,5 +1,5 @@
 import Fuse, { type IFuseOptions } from "fuse.js"
-import { Menu, Search } from "lucide-react"
+import { Dices, Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { fetchAllTags, getTagCount, type SearchResult, type Tag } from "./api/tags"
 import {
@@ -377,7 +377,12 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
             />
             Learning tracks
           </label> */}
-              <button type="button" className="ml-auto text-sm" onClick={handleSurpriseMe}>
+              <button
+                type="button"
+                className="ml-auto flex items-center gap-1 text-sm"
+                onClick={handleSurpriseMe}
+              >
+                <Dices size={16} />
                 Surprise Me!
               </button>
             </div>
