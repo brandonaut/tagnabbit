@@ -126,7 +126,7 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
   const needleAngle = hasNote ? noteIdx * 30 + (cents / 50) * 15 : 0
 
   return (
-    <svg viewBox="0 0 160 160" width={152} height={152}>
+    <svg viewBox="0 0 160 160" width={152} height={152} aria-label="Pitch wheel tuner">
       {/* Outer ring */}
       <circle cx={CX} cy={CY} r={OUTER_R} fill="var(--bg-surface)" />
       <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="var(--border)" strokeWidth={1} />
@@ -145,14 +145,7 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
         return (
           <g key={note}>
             {isActive && <path d={segmentArc(i)} fill={color} opacity={0.22} />}
-            <line
-              x1={dx1}
-              y1={dy1}
-              x2={dx2}
-              y2={dy2}
-              stroke="var(--border)"
-              strokeWidth={0.75}
-            />
+            <line x1={dx1} y1={dy1} x2={dx2} y2={dy2} stroke="var(--border)" strokeWidth={0.75} />
             <text
               x={lx}
               y={ly}
