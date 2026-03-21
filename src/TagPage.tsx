@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
 import { formatKey } from "./formatKey"
+import LearningTrackPlayer from "./LearningTrackPlayer"
 import PdfViewer from "./PdfViewer"
 import PitchPipe from "./PitchPipe"
 import Tuner from "./Tuner"
@@ -23,6 +24,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
   const [error, setError] = useState<string | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [uiVisible, setUiVisible] = useState(true)
+  const learningTracks = tag.learningTracks ?? {}
 
   useEffect(() => {
     if (!sheetUrl) return
@@ -248,6 +250,9 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
           <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} />
           <Tuner tagKey={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} />
         </>
+      )}
+      {Object.keys(learningTracks).length > 0 && (
+        <LearningTrackPlayer tracks={learningTracks} visible={!objectUrl || uiVisible} />
       )}
     </div>
   )

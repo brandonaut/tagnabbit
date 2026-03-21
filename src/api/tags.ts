@@ -16,6 +16,7 @@ export interface Tag {
   sheetMusicUrl: string
   sheetMusicAltUrl: string
   hasLearningTracks: boolean
+  learningTracks?: Record<string, string>
 }
 
 export interface SearchResult {
@@ -40,30 +41,40 @@ function parseTagsXml(xml: string): SearchResult {
   const available = parseInt(tagsEl?.getAttribute("available") ?? "0", 10)
   const count = parseInt(tagsEl?.getAttribute("count") ?? "0", 10)
 
-  const tags: Tag[] = Array.from(doc.getElementsByTagName("tag")).map((el) => ({
-    id: getText(el, "id"),
-    title: getText(el, "Title"),
-    altTitle: getText(el, "AltTitle"),
-    version: getText(el, "Version"),
-    key: getText(el, "WritKey"),
-    parts: getText(el, "Parts"),
-    type: getText(el, "Type"),
-    arranger: getText(el, "Arranger"),
-    posted: getText(el, "Posted"),
-    downloaded: parseInt(getText(el, "Downloaded") || "0", 10),
-    rating: getText(el, "Rating"),
-    ratingCount: getText(el, "RatingCount"),
-    sheetMusicUrl: getText(el, "SheetMusic"),
-    sheetMusicAltUrl: getText(el, "SheetMusicAlt"),
-    hasLearningTracks: !!(
-      getText(el, "AllParts") ||
-      getText(el, "Bass") ||
-      getText(el, "Bari") ||
-      getText(el, "Lead") ||
-      getText(el, "Tenor") ||
-      getText(el, "TeachVid")
-    ),
-  }))
+  const TRACK_FIELDS: [string, string][] = [
+    ["AllParts", "All Parts"],
+    ["Bass", "Bass"],
+    ["Bari", "Baritone"],
+    ["Lead", "Lead"],
+    ["Tenor", "Tenor"],
+    ["TeachVid", "Teaching Video"],
+  ]
+
+  const tags: Tag[] = Array.from(doc.getElementsByTagName("tag")).map((el) => {
+    const learningTracks: Record<string, string> = {}
+    for (const [field, label] of TRACK_FIELDS) {
+      const url = getText(el, field)
+      if (url) learningTracks[label] = url
+    }
+    return {
+      id: getText(el, "id"),
+      title: getText(el, "Title"),
+      altTitle: getText(el, "AltTitle"),
+      version: getText(el, "Version"),
+      key: getText(el, "WritKey"),
+      parts: getText(el, "Parts"),
+      type: getText(el, "Type"),
+      arranger: getText(el, "Arranger"),
+      posted: getText(el, "Posted"),
+      downloaded: parseInt(getText(el, "Downloaded") || "0", 10),
+      rating: getText(el, "Rating"),
+      ratingCount: getText(el, "RatingCount"),
+      sheetMusicUrl: getText(el, "SheetMusic"),
+      sheetMusicAltUrl: getText(el, "SheetMusicAlt"),
+      hasLearningTracks: Object.keys(learningTracks).length > 0,
+      learningTracks,
+    }
+  })
 
   return { available, count, tags }
 }
