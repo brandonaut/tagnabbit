@@ -123,8 +123,9 @@ interface WheelProps {
 
 function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
   const hasNote = noteIdx !== null
-  // Each note occupies 30°; ±50¢ spans ±15° (half a semitone)
-  const needleAngle = hasNote ? noteIdx * 30 + (cents / 50) * 15 : 0
+  // Each note occupies 30°; ±50¢ spans ±15° (half a semitone). Clamp so
+  // JI-adjusted cents > ±50 don't push the needle past the segment boundary.
+  const needleAngle = hasNote ? noteIdx * 30 + (Math.max(-50, Math.min(50, cents)) / 50) * 15 : 0
 
   return (
     <svg viewBox="0 0 160 160" width={152} height={152} aria-label="Pitch wheel tuner">
