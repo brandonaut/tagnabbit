@@ -1,30 +1,6 @@
-import { Mic } from "lucide-react"
+import { CircleGauge } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-const ENHARMONIC: Record<string, string> = {
-  Db: "C#",
-  Eb: "D#",
-  Gb: "F#",
-  Ab: "G#",
-  Bb: "A#",
-}
-
-const DEGREE_NAMES = [
-  "Root",
-  "\u{266D}2",
-  "2nd",
-  "\u{266D}3",
-  "3rd",
-  "4th",
-  "\u{266D}5",
-  "5th",
-  "\u{266D}6",
-  "6th",
-  "\u{266D}7",
-  "7th",
-]
+import { ENHARMONIC, NOTE_NAMES } from "./notes"
 
 // How many cents each scale degree sits above its equal-tempered position in 5-limit JI.
 // Ratios: 1/1, 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8
@@ -80,13 +56,149 @@ function freqToNote(freq: number): { note: string; octave: number; cents: number
   return { note: NOTE_NAMES[noteIdx], octave, cents }
 }
 
-function getScaleDegree(note: string, key: string): string {
-  const keyNorm = ENHARMONIC[key] ?? key
-  const noteNorm = ENHARMONIC[note] ?? note
-  const keyIdx = NOTE_NAMES.indexOf(keyNorm)
-  const noteIdx = NOTE_NAMES.indexOf(noteNorm)
-  if (keyIdx === -1 || noteIdx === -1) return ""
-  return DEGREE_NAMES[(noteIdx - keyIdx + 12) % 12]
+// Wheel SVG geometry
+const CX = 80
+const CY = 80
+const OUTER_R = 70
+const INNER_R = 50
+const LABEL_R = 61
+const NEEDLE_TIP_R = 52
+const NEEDLE_BASE_R = 30
+
+function toXY(angleDeg: number, r: number): { x: number; y: number } {
+  const rad = ((angleDeg - 90) * Math.PI) / 180
+  return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) }
+}
+
+function segmentArc(noteIdx: number): string {
+  const start = noteIdx * 30 - 15
+  const end = noteIdx * 30 + 15
+  const o1 = toXY(start, OUTER_R)
+  const o2 = toXY(end, OUTER_R)
+  const i2 = toXY(end, INNER_R)
+  const i1 = toXY(start, INNER_R)
+  return `M ${o1.x} ${o1.y} A ${OUTER_R} ${OUTER_R} 0 0 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${INNER_R} ${INNER_R} 0 0 0 ${i1.x} ${i1.y} Z`
+}
+
+interface WheelProps {
+  noteIdx: number | null
+  cents: number
+  color: string
+  noteName: string | null
+  octave: number | null
+}
+
+function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
+  const hasNote = noteIdx !== null
+  // Each note occupies 30°; ±50¢ spans ±15° (half a semitone). Clamp so
+  // JI-adjusted cents > ±50 don't push the needle past the segment boundary.
+  const needleAngle = hasNote ? noteIdx * 30 + (Math.max(-50, Math.min(50, cents)) / 50) * 15 : 0
+
+  return (
+    <svg viewBox="0 0 160 160" width={152} height={152} aria-label="Pitch wheel tuner">
+      {/* Outer ring */}
+      <circle cx={CX} cy={CY} r={OUTER_R} fill="var(--bg-surface)" />
+      <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="var(--border)" strokeWidth={1} />
+      {/* Inner face */}
+      <circle cx={CX} cy={CY} r={INNER_R} fill="var(--bg)" />
+      <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="var(--border)" strokeWidth={0.75} />
+
+      {/* Note segments, dividers, and labels */}
+      {NOTE_NAMES.map((note, i) => {
+        const isActive = hasNote && i === noteIdx
+        const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
+        const { x: dx1, y: dy1 } = toXY(i * 30 - 15, INNER_R)
+        const { x: dx2, y: dy2 } = toXY(i * 30 - 15, OUTER_R)
+        const isSharp = note.includes("#")
+
+        return (
+          <g key={note}>
+            {isActive && <path d={segmentArc(i)} fill={color} opacity={0.22} />}
+            <line x1={dx1} y1={dy1} x2={dx2} y2={dy2} stroke="var(--border)" strokeWidth={0.75} />
+            <text
+              x={lx}
+              y={ly}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={isSharp ? 7.5 : 9}
+              fontWeight={isActive ? "700" : "400"}
+              fill={isActive ? color : "var(--text-muted)"}
+              fontFamily="system-ui, sans-serif"
+            >
+              {note}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Center: note name + octave, or listening indicator */}
+      {hasNote && noteName ? (
+        <>
+          <text
+            x={CX}
+            y={CY + 4}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={20}
+            fontWeight="700"
+            fill={color}
+            fontFamily="system-ui, sans-serif"
+            style={{ letterSpacing: "-0.02em" }}
+          >
+            {noteName}
+          </text>
+          {octave !== null && (
+            <text
+              x={CX + 12}
+              y={CY - 8}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={10}
+              fill={color}
+              opacity={0.65}
+              fontFamily="system-ui, sans-serif"
+            >
+              {octave}
+            </text>
+          )}
+        </>
+      ) : (
+        <text
+          x={CX}
+          y={CY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={10}
+          fill="var(--text-muted)"
+          fontFamily="system-ui, sans-serif"
+        >
+          listening…
+        </text>
+      )}
+
+      {/* Needle — rotated group for smooth CSS transition */}
+      {hasNote && (
+        <g
+          style={{
+            transform: `rotate(${needleAngle}deg)`,
+            transformOrigin: `${CX}px ${CY}px`,
+            transition: "transform 0.08s ease-out",
+          }}
+        >
+          <line
+            x1={CX}
+            y1={CY - NEEDLE_BASE_R}
+            x2={CX}
+            y2={CY - NEEDLE_TIP_R}
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+          <circle cx={CX} cy={CY - NEEDLE_TIP_R} r={3} fill={color} />
+        </g>
+      )}
+    </svg>
+  )
 }
 
 interface PitchInfo {
@@ -238,9 +350,9 @@ export default function Tuner({ tagKey, visible = true }: Props) {
     }
   }
 
-  const degree = pitch ? getScaleDegree(pitch.note, tagKey) : null
   const absC = pitch ? Math.abs(pitch.cents) : 0
   const centsColor = pitch ? (absC <= 10 ? "#4ade80" : absC <= 25 ? "#facc15" : "#f87171") : "#888"
+  const noteIdx = pitch ? NOTE_NAMES.indexOf(pitch.note) : null
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only
@@ -250,41 +362,31 @@ export default function Tuner({ tagKey, visible = true }: Props) {
       onClick={(e) => e.stopPropagation()}
     >
       {active && (
-        <div className="bg-[#f9f9f9] dark:bg-[#1a1a1a] border border-[#3334] rounded-lg py-[0.6rem] px-3 min-w-[110px] flex flex-col items-center gap-[0.2rem] z-10">
-          {pitch ? (
-            <>
-              <div className="text-[2rem] font-bold leading-none tracking-[-0.02em]">
-                {pitch.note}
-                <span className="text-base font-normal [vertical-align:super] opacity-60">
-                  {pitch.octave}
-                </span>
-              </div>
-              <div className="relative w-full h-1 bg-[#3334] rounded-[2px] my-[0.2rem] overflow-visible after:content-[''] after:absolute after:left-[40%] after:w-1/5 after:h-full after:bg-[rgba(74,222,128,0.2)] after:rounded-[1px]">
-                <div
-                  className="absolute -top-1 w-[3px] h-3 rounded-[1px] -translate-x-1/2 [transition:left_0.08s_ease-out,background-color_0.15s]"
-                  style={{ left: `${50 + pitch.cents}%`, background: centsColor }}
-                />
-              </div>
-              <div
-                className="text-[0.85rem] font-semibold tabular-nums min-w-[3.5em] text-center"
-                style={{ color: centsColor }}
-              >
+        <div
+          className="rounded-lg p-2 flex flex-col items-center gap-1"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        >
+          <PitchWheel
+            noteIdx={noteIdx}
+            cents={pitch?.cents ?? 0}
+            color={centsColor}
+            noteName={pitch?.note ?? null}
+            octave={pitch?.octave ?? null}
+          />
+          {pitch && (
+            <div className="text-xs pb-1">
+              <span className="font-semibold tabular-nums" style={{ color: centsColor }}>
                 {pitch.cents > 0 ? "+" : ""}
                 {pitch.cents}¢
-              </div>
-              {degree && tagKey && (
-                <div className="text-xs text-[#888]">
-                  {degree} of {tagKey}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-[0.8rem] text-[#888] py-[0.4rem]">listening…</div>
+              </span>
+            </div>
           )}
         </div>
       )}
       {!active && error && (
-        <div className="text-xs text-[#f87171] text-right max-w-[10rem]">{error}</div>
+        <div className="text-xs text-right max-w-[10rem]" style={{ color: "#f87171" }}>
+          {error}
+        </div>
       )}
       <button
         type="button"
@@ -293,7 +395,7 @@ export default function Tuner({ tagKey, visible = true }: Props) {
         aria-label={active ? "Stop tuner" : "Start tuner"}
         title={active ? "Stop tuner" : "Tune"}
       >
-        <Mic size={18} />
+        <CircleGauge size={18} />
       </button>
     </div>
   )
