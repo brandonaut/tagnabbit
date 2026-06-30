@@ -2,21 +2,6 @@ import { Mic } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ENHARMONIC, NOTE_NAMES } from "./notes"
 
-const DEGREE_NAMES = [
-  "Root",
-  "\u{266D}2",
-  "2nd",
-  "\u{266D}3",
-  "3rd",
-  "4th",
-  "\u{266D}5",
-  "5th",
-  "\u{266D}6",
-  "6th",
-  "\u{266D}7",
-  "7th",
-]
-
 // How many cents each scale degree sits above its equal-tempered position in 5-limit JI.
 // Ratios: 1/1, 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8
 // e.g. the major 3rd (5/4) is 386¢, which is 14¢ BELOW the ET major 3rd (400¢) → -13.7
@@ -69,15 +54,6 @@ function freqToNote(freq: number): { note: string; octave: number; cents: number
   const noteIdx = ((rounded % 12) + 12 + 9) % 12
   const octave = Math.floor((rounded + 57) / 12)
   return { note: NOTE_NAMES[noteIdx], octave, cents }
-}
-
-function getScaleDegree(note: string, key: string): string {
-  const keyNorm = ENHARMONIC[key] ?? key
-  const noteNorm = ENHARMONIC[note] ?? note
-  const keyIdx = NOTE_NAMES.indexOf(keyNorm)
-  const noteIdx = NOTE_NAMES.indexOf(noteNorm)
-  if (keyIdx === -1 || noteIdx === -1) return ""
-  return DEGREE_NAMES[(noteIdx - keyIdx + 12) % 12]
 }
 
 // Wheel SVG geometry
@@ -384,7 +360,6 @@ export default function Tuner({ tagKey, visible = true }: Props) {
     }
   }
 
-  const degree = pitch ? getScaleDegree(pitch.note, tagKey) : null
   const absC = pitch ? Math.abs(pitch.cents) : 0
   const centsColor = pitch ? (absC <= 10 ? "#4ade80" : absC <= 25 ? "#facc15" : "#f87171") : "#888"
   const noteIdx = pitch ? NOTE_NAMES.indexOf(pitch.note) : null
@@ -409,12 +384,7 @@ export default function Tuner({ tagKey, visible = true }: Props) {
             octave={pitch?.octave ?? null}
           />
           {pitch && (
-            <div className="flex items-center gap-2 text-xs pb-1">
-              {degree && tagKey && (
-                <span style={{ color: "var(--text-muted)" }}>
-                  {degree} of {tagKey}
-                </span>
-              )}
+            <div className="text-xs pb-1">
               <span className="font-semibold tabular-nums" style={{ color: centsColor }}>
                 {pitch.cents > 0 ? "+" : ""}
                 {pitch.cents}¢
