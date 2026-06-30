@@ -83,7 +83,7 @@ export function TagListItem({
         <div className="flex items-center gap-1.5 shrink-0">
           {isFavorited && <Heart size={12} fill="var(--accent)" color="var(--accent)" />}
           <span className="text-[0.8rem] text-[var(--text-muted)] whitespace-nowrap">
-            #{hlField(tag.id, "id")}
+            #{fieldMatches?.id ? highlightWithIndices(tag.id, fieldMatches.id) : tag.id}
           </span>
         </div>
       </div>
