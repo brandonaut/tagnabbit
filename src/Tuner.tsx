@@ -197,15 +197,6 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
           <circle cx={CX} cy={CY - NEEDLE_TIP_R} r={3} fill={color} />
         </g>
       )}
-
-      {/* Center pivot */}
-      <circle
-        cx={CX}
-        cy={CY}
-        r={4.5}
-        fill={hasNote ? color : "var(--text-muted)"}
-        opacity={hasNote ? 0.55 : 0.25}
-      />
     </svg>
   )
 }
