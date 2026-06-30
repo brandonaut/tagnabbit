@@ -3,8 +3,8 @@ import { useEffect } from "react"
 import githubLogo from "./assets/github.svg"
 import type { TagCacheMeta } from "./cache/tagDatabase"
 
-const APP_VERSION = "0.0.0"
-const RELEASE_DATE = "2026-02-21"
+const APP_VERSION = "0.0.1"
+const RELEASE_DATE = "2026-06-30"
 
 interface Props {
   isOpen: boolean
