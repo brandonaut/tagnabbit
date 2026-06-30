@@ -13,6 +13,8 @@ import SettingsDrawer from "./SettingsDrawer"
 import { type FieldMatches, type MatchRanges, TagListItem } from "./TagListItem"
 
 const FUSE_LIMIT = 100
+const ID_SUBSTRING_LIMIT = 20
+const PURE_NUMERIC = /^\d+$/
 const SURPRISE_COUNT = 7
 
 const STALE_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
@@ -24,10 +26,10 @@ function isCacheStale(cachedAt: string): boolean {
 
 const FUSE_OPTIONS: IFuseOptions<Tag> = {
   keys: [
-    { name: "id", weight: 4 },
-    { name: "title", weight: 3 },
-    { name: "altTitle", weight: 2 },
-    { name: "arranger", weight: 1 },
+    { name: "title", weight: 4 },
+    { name: "altTitle", weight: 3 },
+    { name: "arranger", weight: 2 },
+    { name: "version", weight: 1 },
   ],
   includeMatches: true,
   includeScore: true,
@@ -168,52 +170,88 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
     fuseRef.current = new Fuse(localTags, FUSE_OPTIONS)
   }, [localTags])
 
-  // Run fuzzy search on every query change (or when the index is first built)
+  // Run search on every query change (or when the index is first built)
   useEffect(() => {
     const fuse = fuseRef.current
-    if (!fuse) return
+    if (!fuse || !localTags) return
 
     const q = debouncedQuery.trim()
     if (!q) {
-      if (isSurpriseRef.current) return // Preserve Surprise Me results on remount
+      if (isSurpriseRef.current) return
       setResult(null)
       setLocalMatches(new Map())
       return
     }
     isSurpriseRef.current = false
 
-    const all = fuse.search(q).sort((a, b) => {
-      const scoreDiff = (a.score ?? 0) - (b.score ?? 0)
-      if (scoreDiff !== 0) return scoreDiff
-      return (b.item.downloaded ?? 0) - (a.item.downloaded ?? 0)
-    })
-    const filtered = all.filter((r) => {
-      const tag = r.item
+    function passesFilters(tag: Tag): boolean {
       if (filters.type && tag.type !== filters.type) return false
       if (filters.parts && tag.parts !== filters.parts) return false
       if (filters.learningTracks && !tag.hasLearningTracks) return false
       return true
+    }
+
+    // ID pass (pure numeric queries only)
+    let pinnedTag: Tag | undefined
+    let allIdSubstring: Tag[] = []
+    let idSubstringMatches: Tag[] = []
+
+    if (PURE_NUMERIC.test(q)) {
+      pinnedTag = localTags.find((t) => t.id === q && passesFilters(t))
+      allIdSubstring = localTags.filter((t) => t.id.includes(q) && t.id !== q && passesFilters(t))
+      idSubstringMatches = [...allIdSubstring]
+        .sort((a, b) => (b.downloaded ?? 0) - (a.downloaded ?? 0))
+        .slice(0, ID_SUBSTRING_LIMIT)
+    }
+
+    // Text pass
+    const fuseAll = fuse.search(q).sort((a, b) => {
+      const scoreDiff = (a.score ?? 0) - (b.score ?? 0)
+      if (scoreDiff !== 0) return scoreDiff
+      return (b.item.downloaded ?? 0) - (a.item.downloaded ?? 0)
     })
-    const sliced = filtered.slice(0, FUSE_LIMIT)
+
+    // Merge: pinned → ID substring → Fuse text (deduplicated by id)
+    const seen = new Set<string>()
+    const mergedTags: Tag[] = []
+    const newMatches = new Map<string, FieldMatches>()
+
+    if (pinnedTag) {
+      seen.add(pinnedTag.id)
+      mergedTags.push(pinnedTag)
+      newMatches.set(pinnedTag.id, { id: [[0, q.length - 1]] as MatchRanges })
+    }
+
+    for (const tag of idSubstringMatches) {
+      if (seen.has(tag.id)) continue
+      seen.add(tag.id)
+      mergedTags.push(tag)
+      const start = tag.id.indexOf(q)
+      newMatches.set(tag.id, { id: [[start, start + q.length - 1]] as MatchRanges })
+    }
+
+    const fuseFiltered = fuseAll.filter((r) => !seen.has(r.item.id) && passesFilters(r.item))
+    const fuseSliced = fuseFiltered.slice(0, FUSE_LIMIT)
+
+    for (const r of fuseSliced) {
+      seen.add(r.item.id)
+      mergedTags.push(r.item)
+      newMatches.set(
+        r.item.id,
+        Object.fromEntries(
+          // biome-ignore lint/style/noNonNullAssertion: m.key is checked truthy by filter above
+          (r.matches ?? []).filter((m) => m.key).map((m) => [m.key!, m.indices as MatchRanges]),
+        ),
+      )
+    }
 
     setResult({
-      available: filtered.length,
-      count: sliced.length,
-      tags: sliced.map((r) => r.item),
+      available: (pinnedTag ? 1 : 0) + allIdSubstring.length + fuseFiltered.length,
+      count: mergedTags.length,
+      tags: mergedTags,
     })
-
-    setLocalMatches(
-      new Map(
-        sliced.map((r) => [
-          r.item.id,
-          Object.fromEntries(
-            // biome-ignore lint/style/noNonNullAssertion: m.key is checked truthy by filter above
-            (r.matches ?? []).filter((m) => m.key).map((m) => [m.key!, m.indices as MatchRanges]),
-          ),
-        ]),
-      ),
-    )
-  }, [debouncedQuery, filters])
+    setLocalMatches(newMatches)
+  }, [debouncedQuery, filters, localTags])
 
   async function handleDownloadAll() {
     setIsDownloading(true)
