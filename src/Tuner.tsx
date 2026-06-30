@@ -1,4 +1,4 @@
-import { Mic } from "lucide-react"
+import { CircleGauge } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { ENHARMONIC, NOTE_NAMES } from "./notes"
 
@@ -62,7 +62,8 @@ const CY = 80
 const OUTER_R = 70
 const INNER_R = 50
 const LABEL_R = 61
-const NEEDLE_R = 40
+const NEEDLE_TIP_R = 52
+const NEEDLE_BASE_R = 30
 
 function toXY(angleDeg: number, r: number): { x: number; y: number } {
   const rad = ((angleDeg - 90) * Math.PI) / 180
@@ -184,18 +185,16 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
             transition: "transform 0.08s ease-out",
           }}
         >
-          {/* Needle tail (short back end for balance) */}
           <line
             x1={CX}
-            y1={CY + 10}
+            y1={CY - NEEDLE_BASE_R}
             x2={CX}
-            y2={CY - NEEDLE_R}
+            y2={CY - NEEDLE_TIP_R}
             stroke={color}
             strokeWidth={2}
             strokeLinecap="round"
           />
-          {/* Needle tip dot */}
-          <circle cx={CX} cy={CY - NEEDLE_R} r={3.5} fill={color} />
+          <circle cx={CX} cy={CY - NEEDLE_TIP_R} r={3} fill={color} />
         </g>
       )}
 
@@ -405,7 +404,7 @@ export default function Tuner({ tagKey, visible = true }: Props) {
         aria-label={active ? "Stop tuner" : "Start tuner"}
         title={active ? "Stop tuner" : "Tune"}
       >
-        <Mic size={18} />
+        <CircleGauge size={18} />
       </button>
     </div>
   )
