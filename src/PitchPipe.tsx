@@ -1,7 +1,6 @@
 import { ChevronDown } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-
-const CHROMATIC_NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+import { NOTE_NAMES as CHROMATIC_NOTES, ENHARMONIC } from "./notes"
 
 const NOTE_FREQUENCIES: Record<string, number> = {
   C: 261.63,
@@ -21,14 +20,6 @@ const NOTE_FREQUENCIES: Record<string, number> = {
   "A#": 466.16,
   Bb: 466.16,
   B: 493.88,
-}
-
-const ENHARMONIC: Record<string, string> = {
-  Db: "C#",
-  Eb: "D#",
-  Gb: "F#",
-  Ab: "G#",
-  Bb: "A#",
 }
 
 interface Props {

@@ -1,16 +1,6 @@
 import { Mic } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-
-const ENHARMONIC: Record<string, string> = {
-  Cb: "B",
-  Db: "C#",
-  Eb: "D#",
-  Gb: "F#",
-  Ab: "G#",
-  Bb: "A#",
-}
+import { ENHARMONIC, NOTE_NAMES } from "./notes"
 
 const DEGREE_NAMES = [
   "Root",
