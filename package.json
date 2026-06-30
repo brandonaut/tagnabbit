@@ -9,7 +9,7 @@
     "lint": "biome check .",
     "preview": "vite preview",
     "fetch-tags": "bun run scripts/fetch-tags.ts",
-    "deploy": "bash scripts/deploy.sh"
+    "release": "bash scripts/release.sh"
   },
   "dependencies": {
     "fuse.js": "^7.1.0",
