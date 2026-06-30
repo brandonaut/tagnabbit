@@ -230,6 +230,9 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
       newMatches.set(tag.id, { id: [[start, start + q.length - 1]] as MatchRanges })
     }
 
+    // Exclude all allIdSubstring items from Fuse results to prevent double-counting available count
+    for (const tag of allIdSubstring) seen.add(tag.id)
+
     const fuseFiltered = fuseAll.filter((r) => !seen.has(r.item.id) && passesFilters(r.item))
     const fuseSliced = fuseFiltered.slice(0, FUSE_LIMIT)
 
