@@ -1,4 +1,4 @@
-import Fuse, { type IFuseOptions } from "fuse.js"
+import Fuse, { type FuseResult, type IFuseOptions } from "fuse.js"
 import { Dices, Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { fetchAllTags, getTagCount, type SearchResult, type Tag } from "./api/tags"
@@ -24,13 +24,11 @@ function isCacheStale(cachedAt: string): boolean {
   return Date.now() - new Date(cachedAt).getTime() > STALE_MS + JITTER_MS
 }
 
-const FUSE_OPTIONS: IFuseOptions<Tag> = {
-  keys: [
-    { name: "title", weight: 4 },
-    { name: "altTitle", weight: 3 },
-    { name: "arranger", weight: 2 },
-    { name: "version", weight: 1 },
-  ],
+// Priority order for the text pass: a tag only falls through to the next
+// field if it didn't already match a higher-priority one.
+const FUSE_FIELDS = ["title", "altTitle", "arranger", "version"] as const
+
+const FUSE_OPTIONS: Omit<IFuseOptions<Tag>, "keys"> = {
   includeMatches: true,
   includeScore: true,
   findAllMatches: false,
@@ -79,7 +77,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
     [localTags],
   )
 
-  const fuseRef = useRef<Fuse<Tag> | null>(null)
+  const fuseRef = useRef<Fuse<Tag>[] | null>(null)
   // True when showing Surprise Me results (no query). Used to prevent the
   // fuzzy search effect from clearing the result on remount.
   const isSurpriseRef = useRef(!initialQuery && !!initialResult)
@@ -167,13 +165,15 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
       fuseRef.current = null
       return
     }
-    fuseRef.current = new Fuse(localTags, FUSE_OPTIONS)
+    fuseRef.current = FUSE_FIELDS.map(
+      (field) => new Fuse(localTags, { ...FUSE_OPTIONS, keys: [field] }),
+    )
   }, [localTags])
 
   // Run search on every query change (or when the index is first built)
   useEffect(() => {
-    const fuse = fuseRef.current
-    if (!fuse || !localTags) return
+    const fuseIndexes = fuseRef.current
+    if (!fuseIndexes || !localTags) return
 
     const q = debouncedQuery.trim()
     if (!q) {
@@ -206,12 +206,24 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
         .slice(0, ID_PREFIX_LIMIT)
     }
 
-    // Text pass
-    const fuseAll = fuse.search(q).sort((a, b) => {
-      const scoreDiff = (a.score ?? 0) - (b.score ?? 0)
-      if (scoreDiff !== 0) return scoreDiff
-      return (b.item.downloaded ?? 0) - (a.item.downloaded ?? 0)
-    })
+    // Text pass: search fields in priority order. A tag that matches a
+    // higher-priority field is excluded from later fields, so scores never
+    // combine across fields (e.g. a title match always outranks an
+    // altTitle-only match, no matter how strong the altTitle match is).
+    const matchedIds = new Set<string>()
+    const fuseAll: FuseResult<Tag>[] = []
+    for (const fuseForField of fuseIndexes) {
+      const tierResults = fuseForField
+        .search(q)
+        .filter((r) => !matchedIds.has(r.item.id))
+        .sort((a, b) => {
+          const scoreDiff = (a.score ?? 0) - (b.score ?? 0)
+          if (scoreDiff !== 0) return scoreDiff
+          return (b.item.downloaded ?? 0) - (a.item.downloaded ?? 0)
+        })
+      for (const r of tierResults) matchedIds.add(r.item.id)
+      fuseAll.push(...tierResults)
+    }
 
     // Merge: pinned → ID prefix → Fuse text (deduplicated by id)
     const seen = new Set<string>()
