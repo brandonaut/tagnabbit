@@ -13,7 +13,7 @@ import SettingsDrawer from "./SettingsDrawer"
 import { type FieldMatches, type MatchRanges, TagListItem } from "./TagListItem"
 
 const FUSE_LIMIT = 100
-const ID_SUBSTRING_LIMIT = 20
+const ID_PREFIX_LIMIT = 20
 const PURE_NUMERIC = /^\d+$/
 const SURPRISE_COUNT = 7
 
@@ -193,15 +193,17 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
 
     // ID pass (pure numeric queries only)
     let pinnedTag: Tag | undefined
-    let allIdSubstring: Tag[] = []
-    let idSubstringMatches: Tag[] = []
+    let allIdPrefixMatches: Tag[] = []
+    let idPrefixMatches: Tag[] = []
 
     if (PURE_NUMERIC.test(q)) {
       pinnedTag = localTags.find((t) => t.id === q && passesFilters(t))
-      allIdSubstring = localTags.filter((t) => t.id.includes(q) && t.id !== q && passesFilters(t))
-      idSubstringMatches = [...allIdSubstring]
+      allIdPrefixMatches = localTags.filter(
+        (t) => t.id.startsWith(q) && t.id !== q && passesFilters(t),
+      )
+      idPrefixMatches = [...allIdPrefixMatches]
         .sort((a, b) => (b.downloaded ?? 0) - (a.downloaded ?? 0))
-        .slice(0, ID_SUBSTRING_LIMIT)
+        .slice(0, ID_PREFIX_LIMIT)
     }
 
     // Text pass
@@ -211,7 +213,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
       return (b.item.downloaded ?? 0) - (a.item.downloaded ?? 0)
     })
 
-    // Merge: pinned → ID substring → Fuse text (deduplicated by id)
+    // Merge: pinned → ID prefix → Fuse text (deduplicated by id)
     const seen = new Set<string>()
     const mergedTags: Tag[] = []
     const newMatches = new Map<string, FieldMatches>()
@@ -222,16 +224,15 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
       newMatches.set(pinnedTag.id, { id: [[0, q.length - 1]] as MatchRanges })
     }
 
-    for (const tag of idSubstringMatches) {
+    for (const tag of idPrefixMatches) {
       if (seen.has(tag.id)) continue
       seen.add(tag.id)
       mergedTags.push(tag)
-      const start = tag.id.indexOf(q)
-      newMatches.set(tag.id, { id: [[start, start + q.length - 1]] as MatchRanges })
+      newMatches.set(tag.id, { id: [[0, q.length - 1]] as MatchRanges })
     }
 
-    // Exclude all allIdSubstring items from Fuse results to prevent double-counting available count
-    for (const tag of allIdSubstring) seen.add(tag.id)
+    // Exclude all allIdPrefixMatches items from Fuse results to prevent double-counting available count
+    for (const tag of allIdPrefixMatches) seen.add(tag.id)
 
     const fuseFiltered = fuseAll.filter((r) => !seen.has(r.item.id) && passesFilters(r.item))
     const fuseSliced = fuseFiltered.slice(0, FUSE_LIMIT)
@@ -249,7 +250,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
     }
 
     setResult({
-      available: (pinnedTag ? 1 : 0) + allIdSubstring.length + fuseFiltered.length,
+      available: (pinnedTag ? 1 : 0) + allIdPrefixMatches.length + fuseFiltered.length,
       count: mergedTags.length,
       tags: mergedTags,
     })
