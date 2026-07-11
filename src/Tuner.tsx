@@ -167,7 +167,8 @@ function PitchWheel({
     const g = gestureRef.current
     if (!g || e.pointerId !== g.pointerId) return
     if (!g.dragging) onPlayStop()
-    const committed = g.dragging && armedNoteIdx !== null ? g.noteIdx : null
+    const { x, y } = toSvgPoint(e)
+    const committed = g.dragging && Math.hypot(x - CX, y - CY) <= DROP_ZONE_R ? g.noteIdx : null
     gestureRef.current = null
     setPlayingNoteIdx(null)
     setArmedNoteIdx(null)
