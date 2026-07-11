@@ -4,7 +4,6 @@ import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
 import { formatKey } from "./formatKey"
 import PdfViewer from "./PdfViewer"
-import PitchPipe from "./PitchPipe"
 import Tuner from "./Tuner"
 
 interface Props {
@@ -245,8 +244,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
               />
             )}
           </div>
-          <PitchPipe defaultNote={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} />
-          <Tuner tagKey={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} />
+          <Tuner defaultKey={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} />
         </>
       )}
     </div>

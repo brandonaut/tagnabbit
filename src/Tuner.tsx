@@ -1,6 +1,6 @@
 import { CircleGauge } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ENHARMONIC, NOTE_NAMES } from "./notes"
+import { ENHARMONIC, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
 
 // How many cents each scale degree sits above its equal-tempered position in 5-limit JI.
 // Ratios: 1/1, 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8
@@ -64,6 +64,10 @@ const INNER_R = 50
 const LABEL_R = 61
 const NEEDLE_TIP_R = 52
 const NEEDLE_BASE_R = 30
+// Pointer must move this far (SVG user-space units) before a hold becomes a drag
+const DEAD_ZONE_R = 8
+// Pointer must be within this distance of center to arm a key-change on release
+const DROP_ZONE_R = 25
 
 function toXY(angleDeg: number, r: number): { x: number; y: number } {
   const rad = ((angleDeg - 90) * Math.PI) / 180
@@ -81,39 +85,126 @@ function segmentArc(noteIdx: number): string {
 }
 
 interface WheelProps {
-  noteIdx: number | null
+  detectedNoteIdx: number | null
   cents: number
   color: string
   noteName: string | null
   octave: number | null
+  referenceNoteIdx: number
+  idleLabel: string
+  onPlayStart: (noteIdx: number) => void
+  onPlayStop: () => void
+  onGestureEnd: (committedNoteIdx: number | null) => void
 }
 
-function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
-  const hasNote = noteIdx !== null
+interface Gesture {
+  pointerId: number
+  noteIdx: number
+  startX: number
+  startY: number
+  dragging: boolean
+}
+
+function PitchWheel({
+  detectedNoteIdx,
+  cents,
+  color,
+  noteName,
+  octave,
+  referenceNoteIdx,
+  idleLabel,
+  onPlayStart,
+  onPlayStop,
+  onGestureEnd,
+}: WheelProps) {
+  const hasNote = detectedNoteIdx !== null
   // Each note occupies 30°; ±50¢ spans ±15° (half a semitone). Clamp so
   // JI-adjusted cents > ±50 don't push the needle past the segment boundary.
-  const needleAngle = hasNote ? noteIdx * 30 + (Math.max(-50, Math.min(50, cents)) / 50) * 15 : 0
+  const needleAngle = hasNote
+    ? detectedNoteIdx * 30 + (Math.max(-50, Math.min(50, cents)) / 50) * 15
+    : 0
+
+  const svgRef = useRef<SVGSVGElement>(null)
+  const gestureRef = useRef<Gesture | null>(null)
+  const [playingNoteIdx, setPlayingNoteIdx] = useState<number | null>(null)
+  const [armedNoteIdx, setArmedNoteIdx] = useState<number | null>(null)
+
+  function toSvgPoint(e: React.PointerEvent): { x: number; y: number } {
+    const svg = svgRef.current
+    if (!svg) return { x: 0, y: 0 }
+    const rect = svg.getBoundingClientRect()
+    const scale = 160 / rect.width
+    return { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }
+  }
+
+  function handlePointerDown(noteIdx: number, e: React.PointerEvent<SVGPathElement>) {
+    if (gestureRef.current) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    const { x, y } = toSvgPoint(e)
+    gestureRef.current = { pointerId: e.pointerId, noteIdx, startX: x, startY: y, dragging: false }
+    setPlayingNoteIdx(noteIdx)
+    onPlayStart(noteIdx)
+  }
+
+  function handlePointerMove(e: React.PointerEvent<SVGPathElement>) {
+    const g = gestureRef.current
+    if (!g || e.pointerId !== g.pointerId) return
+    const { x, y } = toSvgPoint(e)
+
+    if (!g.dragging && Math.hypot(x - g.startX, y - g.startY) > DEAD_ZONE_R) {
+      g.dragging = true
+      setPlayingNoteIdx(null)
+      onPlayStop()
+    }
+
+    if (g.dragging) {
+      const distFromCenter = Math.hypot(x - CX, y - CY)
+      setArmedNoteIdx(distFromCenter <= DROP_ZONE_R ? g.noteIdx : null)
+    }
+  }
+
+  function endGesture(e: React.PointerEvent<SVGPathElement>) {
+    const g = gestureRef.current
+    if (!g || e.pointerId !== g.pointerId) return
+    if (!g.dragging) onPlayStop()
+    const committed = g.dragging && armedNoteIdx !== null ? g.noteIdx : null
+    gestureRef.current = null
+    setPlayingNoteIdx(null)
+    setArmedNoteIdx(null)
+    onGestureEnd(committed)
+  }
 
   return (
-    <svg viewBox="0 0 160 160" width={152} height={152} aria-label="Pitch wheel tuner">
+    <svg ref={svgRef} viewBox="0 0 160 160" width={152} height={152} aria-label="Pitch wheel tuner">
       {/* Outer ring */}
       <circle cx={CX} cy={CY} r={OUTER_R} fill="var(--bg-surface)" />
       <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="var(--border)" strokeWidth={1} />
-      {/* Inner face */}
-      <circle cx={CX} cy={CY} r={INNER_R} fill="var(--bg)" />
+      {/* Inner face — tints accent while a drag is armed to set the key */}
+      <circle
+        cx={CX}
+        cy={CY}
+        r={INNER_R}
+        fill={armedNoteIdx !== null ? "var(--accent)" : "var(--bg)"}
+        opacity={armedNoteIdx !== null ? 0.18 : 1}
+      />
       <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="var(--border)" strokeWidth={0.75} />
 
-      {/* Note segments, dividers, and labels */}
+      {/* Note segments, dividers, labels, reference-key marker, and play/drag hit targets */}
       {NOTE_NAMES.map((note, i) => {
-        const isActive = hasNote && i === noteIdx
+        const isDetected = hasNote && i === detectedNoteIdx
+        const isPlaying = i === playingNoteIdx
+        const isReference = i === referenceNoteIdx
         const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
         const { x: dx1, y: dy1 } = toXY(i * 30 - 15, INNER_R)
         const { x: dx2, y: dy2 } = toXY(i * 30 - 15, OUTER_R)
+        const { x: rx, y: ry } = toXY(i * 30, LABEL_R + 9)
         const isSharp = note.includes("#")
 
         return (
           <g key={note}>
-            {isActive && <path d={segmentArc(i)} fill={color} opacity={0.22} />}
+            {(isDetected || isPlaying) && (
+              <path d={segmentArc(i)} fill={isPlaying ? "var(--accent)" : color} opacity={0.22} />
+            )}
             <line x1={dx1} y1={dy1} x2={dx2} y2={dy2} stroke="var(--border)" strokeWidth={0.75} />
             <text
               x={lx}
@@ -121,18 +212,53 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
               textAnchor="middle"
               dominantBaseline="middle"
               fontSize={isSharp ? 7.5 : 9}
-              fontWeight={isActive ? "700" : "400"}
-              fill={isActive ? color : "var(--text-muted)"}
+              fontWeight={isDetected ? "700" : "400"}
+              fill={isDetected ? color : "var(--text-muted)"}
               fontFamily="system-ui, sans-serif"
+              style={{ pointerEvents: "none" }}
             >
               {note}
             </text>
+            {isReference && (
+              <circle
+                cx={rx}
+                cy={ry}
+                r={2.5}
+                fill="var(--accent)"
+                style={{ pointerEvents: "none" }}
+              />
+            )}
+            {/* Hit target on top so it always captures the gesture regardless of what's painted beneath it */}
+            <path
+              d={segmentArc(i)}
+              fill="transparent"
+              style={{ touchAction: "none", cursor: "pointer" }}
+              onPointerDown={(e) => handlePointerDown(i, e)}
+              onPointerMove={handlePointerMove}
+              onPointerUp={endGesture}
+              onPointerCancel={endGesture}
+              aria-label={`Play ${note}, or drag to the center to set it as the reference key`}
+            />
           </g>
         )
       })}
 
-      {/* Center: note name + octave, or listening indicator */}
-      {hasNote && noteName ? (
+      {/* Center: candidate key while a drag is armed, detected note + octave, or idle label */}
+      {armedNoteIdx !== null ? (
+        <text
+          x={CX}
+          y={CY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={20}
+          fontWeight="700"
+          fill="var(--accent)"
+          fontFamily="system-ui, sans-serif"
+          style={{ pointerEvents: "none" }}
+        >
+          {NOTE_NAMES[armedNoteIdx]}
+        </text>
+      ) : hasNote && noteName ? (
         <>
           <text
             x={CX}
@@ -143,7 +269,7 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
             fontWeight="700"
             fill={color}
             fontFamily="system-ui, sans-serif"
-            style={{ letterSpacing: "-0.02em" }}
+            style={{ letterSpacing: "-0.02em", pointerEvents: "none" }}
           >
             {noteName}
           </text>
@@ -157,6 +283,7 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
               fill={color}
               opacity={0.65}
               fontFamily="system-ui, sans-serif"
+              style={{ pointerEvents: "none" }}
             >
               {octave}
             </text>
@@ -171,8 +298,9 @@ function PitchWheel({ noteIdx, cents, color, noteName, octave }: WheelProps) {
           fontSize={10}
           fill="var(--text-muted)"
           fontFamily="system-ui, sans-serif"
+          style={{ pointerEvents: "none" }}
         >
-          listening…
+          {idleLabel}
         </text>
       )}
 
@@ -208,14 +336,21 @@ interface PitchInfo {
 }
 
 interface Props {
-  tagKey: string
+  defaultKey: string
+  variant?: "floating" | "inline"
   visible?: boolean
 }
 
-export default function Tuner({ tagKey, visible = true }: Props) {
+export default function Tuner({ defaultKey, variant = "floating", visible = true }: Props) {
   const [active, setActive] = useState(false)
   const [pitch, setPitch] = useState<PitchInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [selectedKey, setSelectedKey] = useState(() => ENHARMONIC[defaultKey] ?? defaultKey)
+
+  const selectedKeyRef = useRef(selectedKey)
+  useEffect(() => {
+    selectedKeyRef.current = selectedKey
+  }, [selectedKey])
 
   const audioRef = useRef<{
     ctx: AudioContext
@@ -230,6 +365,11 @@ export default function Tuner({ tagKey, visible = true }: Props) {
   const smoothedFreqRef = useRef(0)
   const pendingNoteRef = useRef("")
   const pendingFramesRef = useRef(0)
+  // True while a wheel note is playing — makes the mic tick loop skip analysis
+  const pausedRef = useRef(false)
+  const playAudioRef = useRef<{ ctx: AudioContext; osc: OscillatorNode; gain: GainNode } | null>(
+    null,
+  )
 
   const resetSmoothing = useCallback(() => {
     smoothedFreqRef.current = 0
@@ -257,6 +397,17 @@ export default function Tuner({ tagKey, visible = true }: Props) {
   }, [resetSmoothing])
 
   useEffect(() => stop, [stop])
+
+  useEffect(() => {
+    return () => {
+      const audio = playAudioRef.current
+      if (audio) {
+        audio.osc.stop()
+        audio.ctx.close()
+        playAudioRef.current = null
+      }
+    }
+  }, [])
 
   async function toggle() {
     if (active) {
@@ -292,6 +443,13 @@ export default function Tuner({ tagKey, visible = true }: Props) {
         }
         lastTickRef.current = timestamp
 
+        if (pausedRef.current) {
+          // A wheel note is playing — skip analysis so the needle freezes
+          // instead of reacting to the played tone.
+          animRef.current = requestAnimationFrame(tick)
+          return
+        }
+
         const audio = audioRef.current
         if (!audio) return
 
@@ -310,8 +468,7 @@ export default function Tuner({ tagKey, visible = true }: Props) {
           const result = freqToNote(smoothedFreqRef.current)
 
           // Shift cents relative to the JI target for this scale degree
-          const keyNorm = ENHARMONIC[tagKey] ?? tagKey
-          const keyIdx = NOTE_NAMES.indexOf(keyNorm)
+          const keyIdx = NOTE_NAMES.indexOf(selectedKeyRef.current)
           const noteIdx = NOTE_NAMES.indexOf(result.note)
           const degreeIdx = keyIdx >= 0 && noteIdx >= 0 ? (noteIdx - keyIdx + 12) % 12 : -1
           const jiCents =
@@ -350,41 +507,92 @@ export default function Tuner({ tagKey, visible = true }: Props) {
     }
   }
 
+  function handlePlayStart(noteIdx: number) {
+    if (playAudioRef.current) return
+    const freq = NOTE_FREQUENCIES[NOTE_NAMES[noteIdx]]
+    if (!freq) return
+    if (active) {
+      pausedRef.current = true
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current)
+        silenceTimerRef.current = null
+      }
+    }
+    const ctx = new AudioContext()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = "square"
+    osc.frequency.value = freq
+    gain.gain.value = 0.15
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    playAudioRef.current = { ctx, osc, gain }
+  }
+
+  function handlePlayStop() {
+    const audio = playAudioRef.current
+    if (!audio) return
+    audio.osc.stop()
+    audio.ctx.close()
+    playAudioRef.current = null
+  }
+
+  function handleGestureEnd(committedNoteIdx: number | null) {
+    pausedRef.current = false
+    if (committedNoteIdx !== null) {
+      setSelectedKey(NOTE_NAMES[committedNoteIdx])
+    }
+  }
+
   const absC = pitch ? Math.abs(pitch.cents) : 0
   const centsColor = pitch ? (absC <= 10 ? "#4ade80" : absC <= 25 ? "#facc15" : "#f87171") : "#888"
-  const noteIdx = pitch ? NOTE_NAMES.indexOf(pitch.note) : null
+  const detectedNoteIdx = active && pitch ? NOTE_NAMES.indexOf(pitch.note) : null
+  const referenceNoteIdx = NOTE_NAMES.indexOf(selectedKey)
+  const isFloating = variant === "floating"
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only
-    // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only
+    // biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only, not an interactive element
+    // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only, not an interactive element
     <div
-      className={`fixed bottom-3 right-3 opacity-90 z-50 flex flex-col items-end gap-1 transition-transform duration-300 ${visible ? "translate-y-0" : "translate-y-24"}`}
-      onClick={(e) => e.stopPropagation()}
+      className={
+        isFloating
+          ? `fixed bottom-3 right-3 opacity-90 z-50 flex flex-col items-end gap-1 transition-transform duration-300 ${visible ? "translate-y-0" : "translate-y-24"}`
+          : "flex flex-col items-center gap-1"
+      }
+      onClick={isFloating ? (e) => e.stopPropagation() : undefined}
     >
-      {active && (
-        <div
-          className="rounded-lg p-2 flex flex-col items-center gap-1"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-        >
-          <PitchWheel
-            noteIdx={noteIdx}
-            cents={pitch?.cents ?? 0}
-            color={centsColor}
-            noteName={pitch?.note ?? null}
-            octave={pitch?.octave ?? null}
-          />
-          {pitch && (
-            <div className="text-xs pb-1">
-              <span className="font-semibold tabular-nums" style={{ color: centsColor }}>
-                {pitch.cents > 0 ? "+" : ""}
-                {pitch.cents}¢
-              </span>
-            </div>
+      <div
+        className="rounded-lg p-2 flex flex-col items-center gap-1"
+        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+      >
+        <PitchWheel
+          detectedNoteIdx={detectedNoteIdx}
+          cents={pitch?.cents ?? 0}
+          color={centsColor}
+          noteName={active ? (pitch?.note ?? null) : null}
+          octave={active ? (pitch?.octave ?? null) : null}
+          referenceNoteIdx={referenceNoteIdx}
+          idleLabel={active ? "listening…" : "hold a note"}
+          onPlayStart={handlePlayStart}
+          onPlayStop={handlePlayStop}
+          onGestureEnd={handleGestureEnd}
+        />
+        <div className="text-xs pb-1 flex flex-col items-center gap-0.5">
+          {active && pitch && (
+            <span className="font-semibold tabular-nums" style={{ color: centsColor }}>
+              {pitch.cents > 0 ? "+" : ""}
+              {pitch.cents}¢
+            </span>
           )}
+          <span className="text-[var(--text-muted)]">Key: {selectedKey}</span>
         </div>
-      )}
+      </div>
       {!active && error && (
-        <div className="text-xs text-right max-w-[10rem]" style={{ color: "#f87171" }}>
+        <div
+          className={`text-xs max-w-[10rem] ${isFloating ? "text-right" : "text-center"}`}
+          style={{ color: "#f87171" }}
+        >
           {error}
         </div>
       )}
