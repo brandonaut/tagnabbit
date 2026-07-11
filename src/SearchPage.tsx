@@ -11,6 +11,7 @@ import {
 } from "./cache/tagDatabase"
 import SettingsDrawer from "./SettingsDrawer"
 import { type FieldMatches, type MatchRanges, TagListItem } from "./TagListItem"
+import Tuner from "./Tuner"
 
 const FUSE_LIMIT = 100
 const ID_PREFIX_LIMIT = 20
@@ -446,6 +447,12 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
             <p className="text-[#f87171] m-0" role="alert">
               {error}
             </p>
+          )}
+
+          {!query.trim() && !result && !isSeeding && !isDownloading && (
+            <div className="flex justify-center py-6">
+              <Tuner defaultKey="C" variant="inline" />
+            </div>
           )}
 
           {result && result.tags.length > 0 && (
