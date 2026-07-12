@@ -59,10 +59,10 @@ function freqToNote(freq: number): { note: string; octave: number; cents: number
 // Wheel SVG geometry
 const CX = 80
 const CY = 80
-const OUTER_R = 70
-const INNER_R = 50
-const LABEL_R = 61
-const NEEDLE_TIP_R = 52
+const OUTER_R = 73
+const INNER_R = 42
+const LABEL_R = 58
+const NEEDLE_TIP_R = 40
 const NEEDLE_BASE_R = 30
 // Pointer must move this far (SVG user-space units) before a hold becomes a drag
 const DEAD_ZONE_R = 8
@@ -176,7 +176,7 @@ function PitchWheel({
   }
 
   return (
-    <svg ref={svgRef} viewBox="0 0 160 160" width={152} height={152} aria-label="Pitch wheel tuner">
+    <svg ref={svgRef} viewBox="0 0 160 160" width={200} height={200} aria-label="Pitch wheel tuner">
       {/* Outer ring */}
       <circle cx={CX} cy={CY} r={OUTER_R} fill="var(--bg-surface)" />
       <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="var(--border)" strokeWidth={1} />
@@ -340,9 +340,15 @@ interface Props {
   defaultKey: string
   variant?: "floating" | "inline"
   visible?: boolean
+  collapsible?: boolean
 }
 
-export default function Tuner({ defaultKey, variant = "floating", visible = true }: Props) {
+export default function Tuner({
+  defaultKey,
+  variant = "floating",
+  visible = true,
+  collapsible = false,
+}: Props) {
   const [active, setActive] = useState(false)
   const [pitch, setPitch] = useState<PitchInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -563,32 +569,34 @@ export default function Tuner({ defaultKey, variant = "floating", visible = true
       }
       onClick={isFloating ? (e) => e.stopPropagation() : undefined}
     >
-      <div
-        className="rounded-lg p-2 flex flex-col items-center gap-1"
-        style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-      >
-        <PitchWheel
-          detectedNoteIdx={detectedNoteIdx}
-          cents={pitch?.cents ?? 0}
-          color={centsColor}
-          noteName={active ? (pitch?.note ?? null) : null}
-          octave={active ? (pitch?.octave ?? null) : null}
-          referenceNoteIdx={referenceNoteIdx}
-          idleLabel={active ? "listening…" : "hold a note"}
-          onPlayStart={handlePlayStart}
-          onPlayStop={handlePlayStop}
-          onGestureEnd={handleGestureEnd}
-        />
-        <div className="text-xs pb-1 flex flex-col items-center gap-0.5">
-          {active && pitch && (
-            <span className="font-semibold tabular-nums" style={{ color: centsColor }}>
-              {pitch.cents > 0 ? "+" : ""}
-              {pitch.cents}¢
-            </span>
-          )}
-          <span className="text-[var(--text-muted)]">Key: {selectedKey}</span>
+      {(!collapsible || active) && (
+        <div
+          className="rounded-lg p-2 flex flex-col items-center gap-1"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+        >
+          <PitchWheel
+            detectedNoteIdx={detectedNoteIdx}
+            cents={pitch?.cents ?? 0}
+            color={centsColor}
+            noteName={active ? (pitch?.note ?? null) : null}
+            octave={active ? (pitch?.octave ?? null) : null}
+            referenceNoteIdx={referenceNoteIdx}
+            idleLabel={active ? "listening…" : "hold a note"}
+            onPlayStart={handlePlayStart}
+            onPlayStop={handlePlayStop}
+            onGestureEnd={handleGestureEnd}
+          />
+          <div className="text-xs pb-1 flex flex-col items-center gap-0.5">
+            {active && pitch && (
+              <span className="font-semibold tabular-nums" style={{ color: centsColor }}>
+                {pitch.cents > 0 ? "+" : ""}
+                {pitch.cents}¢
+              </span>
+            )}
+            <span className="text-[var(--text-muted)]">Key: {selectedKey}</span>
+          </div>
         </div>
-      </div>
+      )}
       {!active && error && (
         <div
           className={`text-xs max-w-[10rem] ${isFloating ? "text-right" : "text-center"}`}

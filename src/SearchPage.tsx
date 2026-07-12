@@ -449,12 +449,6 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
             </p>
           )}
 
-          {!query.trim() && !result && !isSeeding && !isDownloading && (
-            <div className="flex justify-center py-6">
-              <Tuner defaultKey="C" variant="inline" />
-            </div>
-          )}
-
           {result && result.tags.length > 0 && (
             <>
               <p className="text-sm text-[var(--text-muted)] m-0">
@@ -490,6 +484,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
         isBackgroundRefreshing={isBackgroundRefreshing}
         onRefreshCache={handleDownloadAll}
       />
+      <Tuner defaultKey="C" collapsible />
     </div>
   )
 }
