@@ -484,7 +484,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
         isBackgroundRefreshing={isBackgroundRefreshing}
         onRefreshCache={handleDownloadAll}
       />
-      <Tuner defaultKey="C" collapsible />
+      <Tuner defaultKey="C" defaultTemperament="et" collapsible />
     </div>
   )
 }

@@ -92,10 +92,10 @@ interface WheelProps {
   noteName: string | null
   octave: number | null
   referenceNoteIdx: number
-  idleLabel: string
+  temperament: "ji" | "et"
   onPlayStart: (noteIdx: number) => void
   onPlayStop: () => void
-  onGestureEnd: (committedNoteIdx: number | null) => void
+  onGestureEnd: (result: GestureResult) => void
 }
 
 interface Gesture {
@@ -106,6 +106,8 @@ interface Gesture {
   dragging: boolean
 }
 
+type GestureResult = { type: "key"; noteIdx: number } | { type: "et" } | { type: "none" }
+
 function PitchWheel({
   detectedNoteIdx,
   cents,
@@ -113,7 +115,7 @@ function PitchWheel({
   noteName,
   octave,
   referenceNoteIdx,
-  idleLabel,
+  temperament,
   onPlayStart,
   onPlayStop,
   onGestureEnd,
@@ -129,6 +131,7 @@ function PitchWheel({
   const gestureRef = useRef<Gesture | null>(null)
   const [playingNoteIdx, setPlayingNoteIdx] = useState<number | null>(null)
   const [armedNoteIdx, setArmedNoteIdx] = useState<number | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   function toSvgPoint(e: React.PointerEvent): { x: number; y: number } {
     const svg = svgRef.current
@@ -155,6 +158,7 @@ function PitchWheel({
     if (!g.dragging && Math.hypot(x - g.startX, y - g.startY) > DEAD_ZONE_R) {
       g.dragging = true
       setPlayingNoteIdx(null)
+      setIsDragging(true)
       onPlayStop()
     }
 
@@ -169,11 +173,27 @@ function PitchWheel({
     if (!g || e.pointerId !== g.pointerId) return
     if (!g.dragging) onPlayStop()
     const { x, y } = toSvgPoint(e)
-    const committed = g.dragging && Math.hypot(x - CX, y - CY) <= DROP_ZONE_R ? g.noteIdx : null
+    const inDropZone = g.dragging && Math.hypot(x - CX, y - CY) <= DROP_ZONE_R
+    const result: GestureResult = !g.dragging
+      ? { type: "none" }
+      : inDropZone
+        ? { type: "key", noteIdx: g.noteIdx }
+        : { type: "et" }
     gestureRef.current = null
     setPlayingNoteIdx(null)
     setArmedNoteIdx(null)
-    onGestureEnd(committed)
+    setIsDragging(false)
+    onGestureEnd(result)
+  }
+
+  function cancelGesture(e: React.PointerEvent<SVGPathElement>) {
+    const g = gestureRef.current
+    if (!g || e.pointerId !== g.pointerId) return
+    if (!g.dragging) onPlayStop()
+    gestureRef.current = null
+    setPlayingNoteIdx(null)
+    setArmedNoteIdx(null)
+    setIsDragging(false)
   }
 
   return (
@@ -196,7 +216,7 @@ function PitchWheel({
         const isDetected = hasNote && i === detectedNoteIdx
         const isPlaying = i === playingNoteIdx
         const isActive = isDetected || isPlaying
-        const isReference = i === referenceNoteIdx
+        const isReference = i === referenceNoteIdx && temperament === "ji"
         const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
         const { x: dx1, y: dy1 } = toXY(i * 30 - 15, INNER_R)
         const { x: dx2, y: dy2 } = toXY(i * 30 - 15, OUTER_R)
@@ -237,14 +257,15 @@ function PitchWheel({
               onPointerDown={(e) => handlePointerDown(i, e)}
               onPointerMove={handlePointerMove}
               onPointerUp={endGesture}
-              onPointerCancel={endGesture}
-              aria-label={`Play ${note}, or drag to the center to set it as the reference key`}
+              onPointerCancel={cancelGesture}
+              aria-label={`Play ${note}, drag to the center to set it as the reference key, or drag away from center to switch to equal temperament`}
             />
           </g>
         )
       })}
 
-      {/* Center: candidate key while a drag is armed, detected note + octave, or idle label */}
+      {/* Center: candidate key or ET while a drag is armed, drag hint while held,
+          detected note + octave + cents, or idle hint */}
       {armedNoteIdx !== null ? (
         <text
           x={CX}
@@ -258,6 +279,34 @@ function PitchWheel({
           style={{ pointerEvents: "none" }}
         >
           {NOTE_NAMES[armedNoteIdx]}
+        </text>
+      ) : isDragging ? (
+        <text
+          x={CX}
+          y={CY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={12}
+          fontWeight="700"
+          fill="var(--text)"
+          fontFamily="system-ui, sans-serif"
+          style={{ pointerEvents: "none" }}
+        >
+          Equal Temp
+        </text>
+      ) : playingNoteIdx !== null ? (
+        <text
+          x={CX}
+          y={CY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={8}
+          fontWeight="600"
+          fill="var(--text-muted)"
+          fontFamily="system-ui, sans-serif"
+          style={{ pointerEvents: "none" }}
+        >
+          Drag to center
         </text>
       ) : hasNote && noteName ? (
         <>
@@ -305,18 +354,32 @@ function PitchWheel({
           </text>
         </>
       ) : (
-        <text
-          x={CX}
-          y={CY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={10}
-          fill="var(--text-muted)"
-          fontFamily="system-ui, sans-serif"
-          style={{ pointerEvents: "none" }}
-        >
-          {idleLabel}
-        </text>
+        <>
+          <text
+            x={CX}
+            y={CY - 5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={7.5}
+            fill="var(--text-muted)"
+            fontFamily="system-ui, sans-serif"
+            style={{ pointerEvents: "none" }}
+          >
+            Tap to play
+          </text>
+          <text
+            x={CX}
+            y={CY + 5}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={7.5}
+            fill="var(--text-muted)"
+            fontFamily="system-ui, sans-serif"
+            style={{ pointerEvents: "none" }}
+          >
+            drag to set key
+          </text>
+        </>
       )}
 
       {/* Needle — rotated group for smooth CSS transition */}
@@ -352,6 +415,7 @@ interface PitchInfo {
 
 interface Props {
   defaultKey: string
+  defaultTemperament?: "ji" | "et"
   variant?: "floating" | "inline"
   visible?: boolean
   collapsible?: boolean
@@ -359,6 +423,7 @@ interface Props {
 
 export default function Tuner({
   defaultKey,
+  defaultTemperament = "ji",
   variant = "floating",
   visible = true,
   collapsible = false,
@@ -367,11 +432,17 @@ export default function Tuner({
   const [pitch, setPitch] = useState<PitchInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState(() => ENHARMONIC[defaultKey] ?? defaultKey)
+  const [temperament, setTemperament] = useState<"ji" | "et">(defaultTemperament)
 
   const selectedKeyRef = useRef(selectedKey)
   useEffect(() => {
     selectedKeyRef.current = selectedKey
   }, [selectedKey])
+
+  const temperamentRef = useRef(temperament)
+  useEffect(() => {
+    temperamentRef.current = temperament
+  }, [temperament])
 
   const audioRef = useRef<{
     ctx: AudioContext
@@ -488,12 +559,17 @@ export default function Tuner({
 
           const result = freqToNote(smoothedFreqRef.current)
 
-          // Shift cents relative to the JI target for this scale degree
-          const keyIdx = NOTE_NAMES.indexOf(selectedKeyRef.current)
-          const noteIdx = NOTE_NAMES.indexOf(result.note)
-          const degreeIdx = keyIdx >= 0 && noteIdx >= 0 ? (noteIdx - keyIdx + 12) % 12 : -1
-          const jiCents =
-            degreeIdx >= 0 ? Math.round(result.cents - JI_OFFSETS[degreeIdx]) : result.cents
+          // In JI mode, shift cents relative to the JI target for this scale degree.
+          // In ET mode, use the raw equal-tempered cents as-is.
+          let displayCents = result.cents
+          if (temperamentRef.current === "ji") {
+            const keyIdx = NOTE_NAMES.indexOf(selectedKeyRef.current)
+            const noteIdx = NOTE_NAMES.indexOf(result.note)
+            const degreeIdx = keyIdx >= 0 && noteIdx >= 0 ? (noteIdx - keyIdx + 12) % 12 : -1
+            if (degreeIdx >= 0) {
+              displayCents = Math.round(result.cents - JI_OFFSETS[degreeIdx])
+            }
+          }
 
           // Require 2 consecutive frames on the same note before updating name
           if (result.note !== pendingNoteRef.current) {
@@ -506,7 +582,7 @@ export default function Tuner({
           setPitch((prev) => ({
             note: pendingFramesRef.current >= 2 ? result.note : (prev?.note ?? result.note),
             octave: pendingFramesRef.current >= 2 ? result.octave : (prev?.octave ?? result.octave),
-            cents: jiCents,
+            cents: displayCents,
           }))
         } else if (!silenceTimerRef.current) {
           silenceTimerRef.current = setTimeout(() => {
@@ -559,10 +635,13 @@ export default function Tuner({
     playAudioRef.current = null
   }
 
-  function handleGestureEnd(committedNoteIdx: number | null) {
+  function handleGestureEnd(result: GestureResult) {
     pausedRef.current = false
-    if (committedNoteIdx !== null) {
-      setSelectedKey(NOTE_NAMES[committedNoteIdx])
+    if (result.type === "key") {
+      setSelectedKey(NOTE_NAMES[result.noteIdx])
+      setTemperament("ji")
+    } else if (result.type === "et") {
+      setTemperament("et")
     }
   }
 
@@ -595,13 +674,15 @@ export default function Tuner({
             noteName={active ? (pitch?.note ?? null) : null}
             octave={active ? (pitch?.octave ?? null) : null}
             referenceNoteIdx={referenceNoteIdx}
-            idleLabel={active ? "listening…" : "hold a note"}
+            temperament={temperament}
             onPlayStart={handlePlayStart}
             onPlayStop={handlePlayStop}
             onGestureEnd={handleGestureEnd}
           />
           <div className="text-xs pb-1 flex flex-col items-center gap-0.5">
-            <span className="text-[var(--text-muted)]">Key: {selectedKey}</span>
+            <span className="text-[var(--text-muted)]">
+              Key: {temperament === "et" ? "Equal temperament" : selectedKey}
+            </span>
           </div>
         </div>
       )}
