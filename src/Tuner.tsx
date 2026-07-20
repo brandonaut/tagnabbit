@@ -1,5 +1,6 @@
 import { CircleGauge } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { wedgeColor } from "./noteColors"
 import { ENHARMONIC, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
 
 // How many cents each scale degree sits above its equal-tempered position in 5-limit JI.
@@ -176,7 +177,7 @@ function PitchWheel({
   }
 
   return (
-    <svg ref={svgRef} viewBox="0 0 160 160" width={200} height={200} aria-label="Pitch wheel tuner">
+    <svg ref={svgRef} viewBox="0 0 160 160" width={240} height={240} aria-label="Pitch wheel tuner">
       {/* Outer ring */}
       <circle cx={CX} cy={CY} r={OUTER_R} fill="var(--bg-surface)" />
       <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="var(--border)" strokeWidth={1} />
@@ -185,7 +186,7 @@ function PitchWheel({
         cx={CX}
         cy={CY}
         r={INNER_R}
-        fill={armedNoteIdx !== null ? "var(--accent)" : "var(--bg)"}
+        fill={armedNoteIdx !== null ? wedgeColor(armedNoteIdx, "active") : "var(--bg)"}
         opacity={armedNoteIdx !== null ? 0.18 : 1}
       />
       <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="var(--border)" strokeWidth={0.75} />
@@ -194,6 +195,7 @@ function PitchWheel({
       {NOTE_NAMES.map((note, i) => {
         const isDetected = hasNote && i === detectedNoteIdx
         const isPlaying = i === playingNoteIdx
+        const isActive = isDetected || isPlaying
         const isReference = i === referenceNoteIdx
         const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
         const { x: dx1, y: dy1 } = toXY(i * 30 - 15, INNER_R)
@@ -203,9 +205,7 @@ function PitchWheel({
 
         return (
           <g key={note}>
-            {(isDetected || isPlaying) && (
-              <path d={segmentArc(i)} fill={isPlaying ? "var(--accent)" : color} opacity={0.22} />
-            )}
+            <path d={segmentArc(i)} fill={wedgeColor(i, isActive ? "active" : "idle")} />
             <line x1={dx1} y1={dy1} x2={dx2} y2={dy2} stroke="var(--border)" strokeWidth={0.75} />
             <text
               x={lx}
@@ -213,8 +213,8 @@ function PitchWheel({
               textAnchor="middle"
               dominantBaseline="middle"
               fontSize={isSharp ? 7.5 : 9}
-              fontWeight={isDetected ? "700" : "400"}
-              fill={isDetected ? color : "var(--text-muted)"}
+              fontWeight={isActive ? "700" : "400"}
+              fill={isActive ? "var(--note-text-on-active)" : "var(--text)"}
               fontFamily="system-ui, sans-serif"
               style={{ pointerEvents: "none" }}
             >
@@ -225,7 +225,7 @@ function PitchWheel({
                 cx={rx}
                 cy={ry}
                 r={2.5}
-                fill="var(--accent)"
+                fill={wedgeColor(i, "reference")}
                 style={{ pointerEvents: "none" }}
               />
             )}
@@ -253,7 +253,7 @@ function PitchWheel({
           dominantBaseline="middle"
           fontSize={20}
           fontWeight="700"
-          fill="var(--accent)"
+          fill={wedgeColor(armedNoteIdx, "active")}
           fontFamily="system-ui, sans-serif"
           style={{ pointerEvents: "none" }}
         >
@@ -289,6 +289,20 @@ function PitchWheel({
               {octave}
             </text>
           )}
+          <text
+            x={CX}
+            y={CY + 16}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={9}
+            fontWeight="600"
+            fill={color}
+            fontFamily="system-ui, sans-serif"
+            style={{ pointerEvents: "none" }}
+          >
+            {cents > 0 ? "+" : ""}
+            {cents}¢
+          </text>
         </>
       ) : (
         <text
@@ -587,12 +601,6 @@ export default function Tuner({
             onGestureEnd={handleGestureEnd}
           />
           <div className="text-xs pb-1 flex flex-col items-center gap-0.5">
-            {active && pitch && (
-              <span className="font-semibold tabular-nums" style={{ color: centsColor }}>
-                {pitch.cents > 0 ? "+" : ""}
-                {pitch.cents}¢
-              </span>
-            )}
             <span className="text-[var(--text-muted)]">Key: {selectedKey}</span>
           </div>
         </div>

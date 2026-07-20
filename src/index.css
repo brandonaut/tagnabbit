@@ -19,6 +19,17 @@
     --accent: #4db8ff;
     --border: rgba(110, 126, 150, 0.2);
 
+    /* Per-note wedge color tiers (Tuner pitch wheel). Hue is computed
+       per-note in noteColors.ts; these tokens control saturation/lightness
+       only, so state stays distinguishable without relying on hue alone. */
+    --note-l-idle: 0.32;
+    --note-c-idle: 0.05;
+    --note-l-reference: 0.55;
+    --note-c-reference: 0.12;
+    --note-l-active: 0.75;
+    --note-c-active: 0.17;
+    --note-text-on-active: #10141e;
+
     color: var(--text);
     background-color: var(--bg);
   }
@@ -31,6 +42,13 @@
       --text-muted: #5a6a80;
       --accent: #0077cc;
       --border: rgba(16, 20, 30, 0.12);
+
+      --note-l-idle: 0.93;
+      --note-c-idle: 0.035;
+      --note-l-reference: 0.68;
+      --note-c-reference: 0.13;
+      --note-l-active: 0.58;
+      --note-c-active: 0.18;
 
       color: var(--text);
       background-color: var(--bg);
