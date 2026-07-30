@@ -197,7 +197,19 @@ function PitchWheel({
   }
 
   return (
-    <svg ref={svgRef} viewBox="0 0 160 160" width={240} height={240} aria-label="Pitch wheel tuner">
+    <svg
+      ref={svgRef}
+      viewBox="0 0 160 160"
+      width={240}
+      height={240}
+      aria-label="Pitch wheel tuner"
+      style={{
+        userSelect: "none",
+        WebkitUserSelect: "none",
+        WebkitTouchCallout: "none",
+        touchAction: "none",
+      }}
+    >
       {/* Outer ring */}
       <circle cx={CX} cy={CY} r={OUTER_R} fill="var(--bg-surface)" />
       <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="var(--border)" strokeWidth={1} />
