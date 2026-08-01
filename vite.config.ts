@@ -1,20 +1,30 @@
+import { existsSync, readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { VitePWA } from "vite-plugin-pwa"
 
+const certFile = resolve(__dirname, ".certs/cert.pem")
+const keyFile = resolve(__dirname, ".certs/key.pem")
+const mkcertHttps =
+  existsSync(certFile) && existsSync(keyFile)
+    ? { cert: readFileSync(certFile), key: readFileSync(keyFile) }
+    : undefined
+
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
   base: "/tagnabbit/",
-  // server: {
-  //   proxy: {
-  //     '/bst-proxy': {
-  //       target: 'https://www.barbershoptags.com',
-  //       changeOrigin: true,
-  //       rewrite: (path) => path.replace(/^\/bst-proxy/, ''),
-  //     },
-  //   },
-  // },
+  server: {
+    https: mkcertHttps,
+    // proxy: {
+    //   '/bst-proxy': {
+    //     target: 'https://www.barbershoptags.com',
+    //     changeOrigin: true,
+    //     rewrite: (path) => path.replace(/^\/bst-proxy/, ''),
+    //   },
+    // },
+  },
   plugins: [
     tailwindcss(),
     react(),
