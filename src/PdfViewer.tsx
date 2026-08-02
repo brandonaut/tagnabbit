@@ -7,10 +7,13 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 interface Props {
   url: string
   title?: string
+  onReady?: () => void
 }
 
-export default function PdfViewer({ url, title }: Props) {
+export default function PdfViewer({ url, title, onReady }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
 
   useEffect(() => {
     const container = containerRef.current
@@ -46,6 +49,8 @@ export default function PdfViewer({ url, title }: Props) {
 
         if (!cancelled) container.appendChild(canvas)
       }
+
+      if (!cancelled) onReadyRef.current?.()
     })
 
     return () => {

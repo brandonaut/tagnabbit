@@ -1,4 +1,4 @@
-import { ArrowLeft, Heart, Info, X } from "lucide-react"
+import { ArrowLeft, Heart, Info, Loader2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
@@ -22,6 +22,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
   const [error, setError] = useState<string | null>(null)
   const [infoOpen, setInfoOpen] = useState(false)
   const [uiVisible, setUiVisible] = useState(true)
+  const [contentReady, setContentReady] = useState(false)
 
   useEffect(() => {
     if (!sheetUrl) return
@@ -32,6 +33,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
     setLoading(true)
     setError(null)
     setObjectUrl(null)
+    setContentReady(false)
 
     getSheetMusic(sheetUrl)
       .then(({ objectUrl: url, mimeType: mime }) => {
@@ -60,6 +62,13 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
 
   const isImage = mimeType.startsWith("image/")
   const isPdf = mimeType === "application/pdf"
+
+  useEffect(() => {
+    // Generic fallback viewer has a fixed height, so it's ready as soon as it's fetched.
+    if (objectUrl && !isImage && !isPdf) setContentReady(true)
+  }, [objectUrl, isImage, isPdf])
+
+  const showSpinner = !!sheetUrl && (loading || (!!objectUrl && !contentReady))
 
   return (
     <div className="relative pb-20">
@@ -208,11 +217,20 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
         </div>
       </div>
 
+      {showSpinner && (
+        <div className="fixed inset-0 flex items-center justify-center z-40">
+          <Loader2
+            className="animate-spin text-[var(--text-muted)]"
+            size={32}
+            aria-label="Loading sheet music"
+          />
+        </div>
+      )}
+
       {/* Non-sheet-music states — padded below the header */}
       {!objectUrl && (
         <div className="pt-14 px-4 flex flex-col gap-3">
           {!sheetUrl && <p className="text-[var(--text-muted)]">No sheet music available.</p>}
-          {sheetUrl && loading && <p className="text-[var(--text-muted)]">Loading sheet music…</p>}
           {sheetUrl && error && (
             <div>
               <p className="text-[#f87171] m-0" role="alert">
@@ -226,23 +244,37 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
         </div>
       )}
 
-      {/* Sheet music — fills from top, tap to toggle header/controls */}
+      {/* Sheet music — vertically centered, tap to toggle header/controls */}
       {objectUrl && (
         <>
           {/* biome-ignore lint/a11y/useKeyWithClickEvents: tap-to-toggle UI overlay */}
           {/* biome-ignore lint/a11y/noStaticElementInteractions: tap-to-toggle UI overlay */}
-          <div onClick={() => setUiVisible((v) => !v)}>
-            {isImage ? (
-              <img src={objectUrl} alt={`Sheet music for ${tag.title}`} className="w-full h-auto" />
-            ) : isPdf ? (
-              <PdfViewer url={objectUrl} title={`Sheet music for ${tag.title}`} />
-            ) : (
-              <iframe
-                src={objectUrl}
-                title={`Sheet music for ${tag.title}`}
-                className="w-full h-[80vh]"
-              />
-            )}
+          <div
+            className="min-h-dvh flex flex-col items-center justify-center"
+            onClick={() => setUiVisible((v) => !v)}
+          >
+            <div className={`w-full ${contentReady ? "" : "opacity-0"}`}>
+              {isImage ? (
+                <img
+                  src={objectUrl}
+                  alt={`Sheet music for ${tag.title}`}
+                  className="w-full h-auto"
+                  onLoad={() => setContentReady(true)}
+                />
+              ) : isPdf ? (
+                <PdfViewer
+                  url={objectUrl}
+                  title={`Sheet music for ${tag.title}`}
+                  onReady={() => setContentReady(true)}
+                />
+              ) : (
+                <iframe
+                  src={objectUrl}
+                  title={`Sheet music for ${tag.title}`}
+                  className="w-full h-[80vh]"
+                />
+              )}
+            </div>
           </div>
           <Tuner defaultKey={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} collapsible />
         </>
