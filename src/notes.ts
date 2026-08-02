@@ -1,5 +1,16 @@
 export const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
+// Display-only enharmonic pairs for the 5 accidental notes, ordered [primary, secondary].
+// Sharp-first for C#/D#/F#, flat-first for Ab/Bb (matching common usage), by note index.
+// Natural notes have no entry and render as a single name.
+export const NOTE_DISPLAY: Record<number, [primary: string, secondary: string]> = {
+  1: ["C#", "Db"],
+  3: ["D#", "Eb"],
+  6: ["F#", "Gb"],
+  8: ["Ab", "G#"],
+  10: ["Bb", "A#"],
+}
+
 export const ENHARMONIC: Record<string, string> = {
   Cb: "B",
   Db: "C#",

@@ -1,7 +1,7 @@
 import { ChevronDown, CircleGauge } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { wedgeColor } from "./noteColors"
-import { ENHARMONIC, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
+import { ENHARMONIC, NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
 
 // How many cents each scale degree sits above its equal-tempered position in 5-limit JI.
 // Ratios: 1/1, 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8
@@ -191,25 +191,58 @@ function PitchWheel({
         const { x: dx1, y: dy1 } = toXY(i * 30 - 15, INNER_R)
         const { x: dx2, y: dy2 } = toXY(i * 30 - 15, OUTER_R)
         const { x: rx, y: ry } = toXY(i * 30, LABEL_R + 9)
-        const isSharp = note.includes("#")
+        const display = NOTE_DISPLAY[i]
+        const textFill = isActive ? "var(--note-text-on-active)" : "var(--text)"
 
         return (
           <g key={note}>
             <path d={segmentArc(i)} fill={wedgeColor(i, isActive ? "active" : "idle")} />
             <line x1={dx1} y1={dy1} x2={dx2} y2={dy2} stroke="var(--border)" strokeWidth={0.75} />
-            <text
-              x={lx}
-              y={ly}
-              textAnchor="middle"
-              dominantBaseline="middle"
-              fontSize={isSharp ? 7.5 : 9}
-              fontWeight={isActive ? "700" : "400"}
-              fill={isActive ? "var(--note-text-on-active)" : "var(--text)"}
-              fontFamily="system-ui, sans-serif"
-              style={{ pointerEvents: "none" }}
-            >
-              {note}
-            </text>
+            {display ? (
+              <>
+                <text
+                  x={lx}
+                  y={ly - 3.5}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={7}
+                  fontWeight={isActive ? "700" : "400"}
+                  fill={textFill}
+                  fontFamily="system-ui, sans-serif"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {display[0]}
+                </text>
+                <text
+                  x={lx}
+                  y={ly + 4}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={5.5}
+                  fontWeight={isActive ? "700" : "400"}
+                  fill={textFill}
+                  fillOpacity={0.6}
+                  fontFamily="system-ui, sans-serif"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {display[1]}
+                </text>
+              </>
+            ) : (
+              <text
+                x={lx}
+                y={ly}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={9}
+                fontWeight={isActive ? "700" : "400"}
+                fill={textFill}
+                fontFamily="system-ui, sans-serif"
+                style={{ pointerEvents: "none" }}
+              >
+                {note}
+              </text>
+            )}
             {isReference && (
               <circle
                 cx={rx}
@@ -365,23 +398,34 @@ function KeyPicker({ selectedKey, temperament, onSelectKey, onSelectET }: KeyPic
           <div className="grid grid-cols-4 gap-1">
             {NOTE_NAMES.map((note, i) => {
               const isSelected = temperament === "ji" && i === selectedIdx
+              const display = NOTE_DISPLAY[i]
+              const cellColor = isSelected ? "var(--note-text-on-active)" : "var(--text)"
               return (
                 <button
                   key={note}
                   type="button"
                   role="menuitem"
-                  className="rounded px-2 py-1.5 text-[11px] font-semibold border-transparent"
+                  className="rounded px-2 h-8 flex flex-col items-center justify-center leading-none border-transparent"
                   style={{
                     background: wedgeColor(i, isSelected ? "reference" : "idle"),
-                    color: isSelected ? "var(--note-text-on-active)" : "var(--text)",
+                    color: cellColor,
                   }}
                   onClick={() => {
                     onSelectKey(i)
                     setIsOpen(false)
                   }}
-                  aria-label={note}
+                  aria-label={display ? `${display[0]}, ${display[1]}` : note}
                 >
-                  {note}
+                  {display ? (
+                    <>
+                      <span className="text-[10px] font-semibold">{display[0]}</span>
+                      <span className="text-[8px]" style={{ opacity: 0.6 }}>
+                        {display[1]}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[11px] font-semibold">{note}</span>
+                  )}
                 </button>
               )
             })}
