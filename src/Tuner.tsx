@@ -71,6 +71,14 @@ function toXY(angleDeg: number, r: number): { x: number; y: number } {
   return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) }
 }
 
+// Inverse of toXY's angle mapping: which of the 12 wedges a point falls under,
+// independent of its distance from center.
+function angleToNoteIdx(x: number, y: number): number {
+  const deg = (Math.atan2(y - CY, x - CX) * 180) / Math.PI + 90
+  const idx = Math.round(deg / 30)
+  return ((idx % 12) + 12) % 12
+}
+
 function segmentArc(noteIdx: number): string {
   const start = noteIdx * 30 - 15
   const end = noteIdx * 30 + 15
@@ -89,8 +97,9 @@ interface WheelProps {
   octave: number | null
   referenceNoteIdx: number
   temperament: "ji" | "et"
-  onPlayStart: (noteIdx: number) => void
-  onPlayStop: () => void
+  onPlayStart: (pointerId: number, noteIdx: number) => void
+  onNoteChange: (pointerId: number, noteIdx: number) => void
+  onPlayStop: (pointerId: number) => void
 }
 
 function PitchWheel({
@@ -102,6 +111,7 @@ function PitchWheel({
   referenceNoteIdx,
   temperament,
   onPlayStart,
+  onNoteChange,
   onPlayStop,
 }: WheelProps) {
   const hasNote = detectedNoteIdx !== null
@@ -111,27 +121,48 @@ function PitchWheel({
     ? detectedNoteIdx * 30 + (Math.max(-50, Math.min(50, cents)) / 50) * 15
     : 0
 
-  const playRef = useRef<{ pointerId: number; noteIdx: number } | null>(null)
-  const [playingNoteIdx, setPlayingNoteIdx] = useState<number | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  // Each active pointer glides independently; noteIdx is whichever wedge that
+  // pointer's angle currently falls under, updated as it crosses boundaries.
+  const gesturesRef = useRef<Map<number, number>>(new Map())
+  const [activeNoteIdxs, setActiveNoteIdxs] = useState<Set<number>>(new Set())
+
+  function toSvgPoint(e: React.PointerEvent): { x: number; y: number } {
+    const svg = svgRef.current
+    if (!svg) return { x: 0, y: 0 }
+    const rect = svg.getBoundingClientRect()
+    const scale = 160 / rect.width
+    return { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }
+  }
 
   function handlePointerDown(noteIdx: number, e: React.PointerEvent<SVGPathElement>) {
-    if (playRef.current) return
+    if (gesturesRef.current.has(e.pointerId)) return
     e.currentTarget.setPointerCapture(e.pointerId)
-    playRef.current = { pointerId: e.pointerId, noteIdx }
-    setPlayingNoteIdx(noteIdx)
-    onPlayStart(noteIdx)
+    gesturesRef.current.set(e.pointerId, noteIdx)
+    setActiveNoteIdxs(new Set(gesturesRef.current.values()))
+    onPlayStart(e.pointerId, noteIdx)
+  }
+
+  function handlePointerMove(e: React.PointerEvent<SVGPathElement>) {
+    if (!gesturesRef.current.has(e.pointerId)) return
+    const { x, y } = toSvgPoint(e)
+    const noteIdx = angleToNoteIdx(x, y)
+    if (gesturesRef.current.get(e.pointerId) === noteIdx) return
+    gesturesRef.current.set(e.pointerId, noteIdx)
+    setActiveNoteIdxs(new Set(gesturesRef.current.values()))
+    onNoteChange(e.pointerId, noteIdx)
   }
 
   function endGesture(e: React.PointerEvent<SVGPathElement>) {
-    const g = playRef.current
-    if (!g || e.pointerId !== g.pointerId) return
-    playRef.current = null
-    setPlayingNoteIdx(null)
-    onPlayStop()
+    if (!gesturesRef.current.has(e.pointerId)) return
+    gesturesRef.current.delete(e.pointerId)
+    setActiveNoteIdxs(new Set(gesturesRef.current.values()))
+    onPlayStop(e.pointerId)
   }
 
   return (
     <svg
+      ref={svgRef}
       viewBox="0 0 160 160"
       width={240}
       height={240}
@@ -153,7 +184,7 @@ function PitchWheel({
       {/* Note segments, dividers, labels, reference-key marker, and tap hit targets */}
       {NOTE_NAMES.map((note, i) => {
         const isDetected = hasNote && i === detectedNoteIdx
-        const isPlaying = i === playingNoteIdx
+        const isPlaying = activeNoteIdxs.has(i)
         const isActive = isDetected || isPlaying
         const isReference = i === referenceNoteIdx && temperament === "ji"
         const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
@@ -194,16 +225,17 @@ function PitchWheel({
               fill="transparent"
               style={{ touchAction: "none", cursor: "pointer" }}
               onPointerDown={(e) => handlePointerDown(i, e)}
+              onPointerMove={handlePointerMove}
               onPointerUp={endGesture}
               onPointerCancel={endGesture}
-              aria-label={`Play ${note}`}
+              aria-label={`Play ${note}, or drag across the ring to play other notes as you cross them`}
             />
           </g>
         )
       })}
 
-      {/* Center: blank while held, detected note + octave + cents, or idle hint */}
-      {playingNoteIdx !== null ? null : hasNote && noteName ? (
+      {/* Center: blank while any note is playing, otherwise detected note + octave + cents */}
+      {activeNoteIdxs.size > 0 ? null : hasNote && noteName ? (
         <>
           <text
             x={CX}
@@ -248,20 +280,7 @@ function PitchWheel({
             {cents}¢
           </text>
         </>
-      ) : (
-        <text
-          x={CX}
-          y={CY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={7.5}
-          fill="var(--text-muted)"
-          fontFamily="system-ui, sans-serif"
-          style={{ pointerEvents: "none" }}
-        >
-          Tap to play
-        </text>
-      )}
+      ) : null}
 
       {/* Needle — rotated group for smooth CSS transition */}
       {hasNote && (
@@ -440,11 +459,11 @@ export default function Tuner({
   const smoothedFreqRef = useRef(0)
   const pendingNoteRef = useRef("")
   const pendingFramesRef = useRef(0)
-  // True while a wheel note is playing — makes the mic tick loop skip analysis
-  const pausedRef = useRef(false)
-  const playAudioRef = useRef<{ ctx: AudioContext; osc: OscillatorNode; gain: GainNode } | null>(
-    null,
-  )
+  // Shared across all concurrent wheel gestures; created lazily on the first
+  // press and closed once every gesture has released.
+  const sharedAudioCtxRef = useRef<AudioContext | null>(null)
+  // One oscillator/gain pair per active pointer, keyed by pointerId.
+  const gesturesAudioRef = useRef<Map<number, { osc: OscillatorNode; gain: GainNode }>>(new Map())
 
   const resetSmoothing = useCallback(() => {
     smoothedFreqRef.current = 0
@@ -475,11 +494,13 @@ export default function Tuner({
 
   useEffect(() => {
     return () => {
-      const audio = playAudioRef.current
-      if (audio) {
+      for (const audio of gesturesAudioRef.current.values()) {
         audio.osc.stop()
-        audio.ctx.close()
-        playAudioRef.current = null
+      }
+      gesturesAudioRef.current.clear()
+      if (sharedAudioCtxRef.current) {
+        sharedAudioCtxRef.current.close()
+        sharedAudioCtxRef.current = null
       }
     }
   }, [])
@@ -518,9 +539,10 @@ export default function Tuner({
         }
         lastTickRef.current = timestamp
 
-        if (pausedRef.current) {
+        if (gesturesAudioRef.current.size > 0) {
           // A wheel note is playing — skip analysis so the needle freezes
-          // instead of reacting to the played tone.
+          // instead of reacting to the played tone. Resumes only once every
+          // concurrent gesture has released.
           animRef.current = requestAnimationFrame(tick)
           return
         }
@@ -587,18 +609,18 @@ export default function Tuner({
     }
   }
 
-  function handlePlayStart(noteIdx: number) {
-    if (playAudioRef.current) return
+  function handlePlayStart(pointerId: number, noteIdx: number) {
+    if (gesturesAudioRef.current.has(pointerId)) return
     const freq = NOTE_FREQUENCIES[NOTE_NAMES[noteIdx]]
     if (!freq) return
-    if (active) {
-      pausedRef.current = true
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current)
-        silenceTimerRef.current = null
-      }
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current)
+      silenceTimerRef.current = null
     }
-    const ctx = new AudioContext()
+    if (!sharedAudioCtxRef.current) {
+      sharedAudioCtxRef.current = new AudioContext()
+    }
+    const ctx = sharedAudioCtxRef.current
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.type = "square"
@@ -607,16 +629,27 @@ export default function Tuner({
     osc.connect(gain)
     gain.connect(ctx.destination)
     osc.start()
-    playAudioRef.current = { ctx, osc, gain }
+    gesturesAudioRef.current.set(pointerId, { osc, gain })
   }
 
-  function handlePlayStop() {
-    pausedRef.current = false
-    const audio = playAudioRef.current
+  function handleNoteChange(pointerId: number, noteIdx: number) {
+    const freq = NOTE_FREQUENCIES[NOTE_NAMES[noteIdx]]
+    const audio = gesturesAudioRef.current.get(pointerId)
+    if (!freq || !audio) return
+    audio.osc.frequency.value = freq
+  }
+
+  function handlePlayStop(pointerId: number) {
+    const audio = gesturesAudioRef.current.get(pointerId)
     if (!audio) return
     audio.osc.stop()
-    audio.ctx.close()
-    playAudioRef.current = null
+    audio.osc.disconnect()
+    audio.gain.disconnect()
+    gesturesAudioRef.current.delete(pointerId)
+    if (gesturesAudioRef.current.size === 0 && sharedAudioCtxRef.current) {
+      sharedAudioCtxRef.current.close()
+      sharedAudioCtxRef.current = null
+    }
   }
 
   const absC = pitch ? Math.abs(pitch.cents) : 0
@@ -650,6 +683,7 @@ export default function Tuner({
             referenceNoteIdx={referenceNoteIdx}
             temperament={temperament}
             onPlayStart={handlePlayStart}
+            onNoteChange={handleNoteChange}
             onPlayStop={handlePlayStop}
           />
           <KeyPicker

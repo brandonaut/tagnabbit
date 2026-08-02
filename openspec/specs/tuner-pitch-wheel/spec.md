@@ -63,26 +63,19 @@ The reference key and temperament mode are set via the `tuner-key-picker` chip a
 - **WHEN** a pitch is detected while the tuner is in equal-temperament mode
 - **THEN** the displayed cents offset is the raw equal-tempered deviation, without any just-intonation offset applied relative to a key
 
-### Requirement: No hint while holding a wedge
-While a wedge is held for tap-to-play, the wheel's center face SHALL NOT display any hint text, since tap-to-play is the wedge's only gesture and needs no further discovery aid once already in progress.
+### Requirement: No hint text on the wheel's center face
+The wheel's center face SHALL NOT display any hint text, regardless of whether a gesture is in progress, idle, or a pitch is detected.
 
-#### Scenario: Holding a wedge shows no hint text
-- **WHEN** the user presses and holds a wedge to play its tone
-- **THEN** the center face displays no hint text for the duration of the hold
+#### Scenario: Center face never shows hint text
+- **WHEN** the wheel is idle, a gesture is in progress, or a pitch is detected
+- **THEN** the center face displays no hint text in any of these states
 
-### Requirement: Idle hint indicates the tap gesture
-When no gesture is in progress and no pitch is currently detected, the wheel's center face SHALL display a hint indicating a wedge can be tapped to play its tone, regardless of whether the microphone is active.
+### Requirement: Wedge accessible label describes tap-to-play and glide
+Each wedge's accessible label SHALL describe both that tapping it plays its tone and that dragging across the ring plays other notes as they're crossed.
 
-#### Scenario: Idle center shows a tap hint
-- **WHEN** no gesture is in progress and no pitch is currently detected
-- **THEN** the center face displays a hint indicating a wedge can be tapped to play its tone, whether or not the microphone is currently listening
-
-### Requirement: Wedge accessible label describes tap-to-play only
-Each wedge's accessible label SHALL describe only the tap-to-play gesture, with no mention of dragging.
-
-#### Scenario: Wedge accessible label mentions only playing the note
+#### Scenario: Wedge accessible label mentions playing and gliding
 - **WHEN** an assistive technology reads a wedge's hit-target label
-- **THEN** the label mentions only that tapping the wedge plays that note's tone
+- **THEN** the label mentions both that tapping the wedge plays that note's tone and that dragging across the ring plays other notes as the pointer crosses them
 
 ### Requirement: Page-level default temperament
 The `Tuner` component SHALL accept an optional default temperament, used when there is no meaningful reference key to default to.
