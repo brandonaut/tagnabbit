@@ -5,6 +5,7 @@ import { getSheetMusic } from "./cache/sheetMusic"
 import { formatKey } from "./formatKey"
 import PdfViewer from "./PdfViewer"
 import Tuner from "./Tuner"
+import { useWakeLock } from "./useWakeLock"
 
 interface Props {
   tag: Tag
@@ -69,6 +70,8 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
   }, [objectUrl, isImage, isPdf])
 
   const showSpinner = !!sheetUrl && (loading || (!!objectUrl && !contentReady))
+
+  useWakeLock(contentReady)
 
   return (
     <div className="relative pb-20">
