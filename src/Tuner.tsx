@@ -190,7 +190,6 @@ function PitchWheel({
         const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
         const { x: dx1, y: dy1 } = toXY(i * 30 - 15, INNER_R)
         const { x: dx2, y: dy2 } = toXY(i * 30 - 15, OUTER_R)
-        const { x: rx, y: ry } = toXY(i * 30, LABEL_R + 9)
         const display = NOTE_DISPLAY[i]
         const textFill = isActive ? "var(--note-text-on-active)" : "var(--text)"
 
@@ -244,11 +243,12 @@ function PitchWheel({
               </text>
             )}
             {isReference && (
-              <circle
-                cx={rx}
-                cy={ry}
-                r={2.5}
-                fill={wedgeColor(i, "reference")}
+              <path
+                d={segmentArc(i)}
+                fill="none"
+                stroke={wedgeColor(i, "reference")}
+                strokeWidth={1.75}
+                strokeLinejoin="round"
                 style={{ pointerEvents: "none" }}
               />
             )}
