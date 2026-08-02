@@ -3,7 +3,7 @@ import { useEffect } from "react"
 import githubLogo from "./assets/github.svg"
 import type { TagCacheMeta } from "./cache/tagDatabase"
 
-const APP_VERSION = "0.0.4"
+const APP_VERSION = "0.0.5"
 const RELEASE_DATE = "2026-08-02"
 
 interface Props {
