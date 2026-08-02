@@ -1,4 +1,4 @@
-import { CircleGauge } from "lucide-react"
+import { ChevronDown, CircleGauge } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { wedgeColor } from "./noteColors"
 import { ENHARMONIC, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
@@ -65,10 +65,6 @@ const INNER_R = 42
 const LABEL_R = 58
 const NEEDLE_TIP_R = 40
 const NEEDLE_BASE_R = 30
-// Pointer must move this far (SVG user-space units) before a hold becomes a drag
-const DEAD_ZONE_R = 8
-// Pointer must be within this distance of center to arm a key-change on release
-const DROP_ZONE_R = 25
 
 function toXY(angleDeg: number, r: number): { x: number; y: number } {
   const rad = ((angleDeg - 90) * Math.PI) / 180
@@ -95,18 +91,7 @@ interface WheelProps {
   temperament: "ji" | "et"
   onPlayStart: (noteIdx: number) => void
   onPlayStop: () => void
-  onGestureEnd: (result: GestureResult) => void
 }
-
-interface Gesture {
-  pointerId: number
-  noteIdx: number
-  startX: number
-  startY: number
-  dragging: boolean
-}
-
-type GestureResult = { type: "key"; noteIdx: number } | { type: "et" } | { type: "none" }
 
 function PitchWheel({
   detectedNoteIdx,
@@ -118,7 +103,6 @@ function PitchWheel({
   temperament,
   onPlayStart,
   onPlayStop,
-  onGestureEnd,
 }: WheelProps) {
   const hasNote = detectedNoteIdx !== null
   // Each note occupies 30°; ±50¢ spans ±15° (half a semitone). Clamp so
@@ -127,78 +111,27 @@ function PitchWheel({
     ? detectedNoteIdx * 30 + (Math.max(-50, Math.min(50, cents)) / 50) * 15
     : 0
 
-  const svgRef = useRef<SVGSVGElement>(null)
-  const gestureRef = useRef<Gesture | null>(null)
+  const playRef = useRef<{ pointerId: number; noteIdx: number } | null>(null)
   const [playingNoteIdx, setPlayingNoteIdx] = useState<number | null>(null)
-  const [armedNoteIdx, setArmedNoteIdx] = useState<number | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-
-  function toSvgPoint(e: React.PointerEvent): { x: number; y: number } {
-    const svg = svgRef.current
-    if (!svg) return { x: 0, y: 0 }
-    const rect = svg.getBoundingClientRect()
-    const scale = 160 / rect.width
-    return { x: (e.clientX - rect.left) * scale, y: (e.clientY - rect.top) * scale }
-  }
 
   function handlePointerDown(noteIdx: number, e: React.PointerEvent<SVGPathElement>) {
-    if (gestureRef.current) return
+    if (playRef.current) return
     e.currentTarget.setPointerCapture(e.pointerId)
-    const { x, y } = toSvgPoint(e)
-    gestureRef.current = { pointerId: e.pointerId, noteIdx, startX: x, startY: y, dragging: false }
+    playRef.current = { pointerId: e.pointerId, noteIdx }
     setPlayingNoteIdx(noteIdx)
     onPlayStart(noteIdx)
   }
 
-  function handlePointerMove(e: React.PointerEvent<SVGPathElement>) {
-    const g = gestureRef.current
-    if (!g || e.pointerId !== g.pointerId) return
-    const { x, y } = toSvgPoint(e)
-
-    if (!g.dragging && Math.hypot(x - g.startX, y - g.startY) > DEAD_ZONE_R) {
-      g.dragging = true
-      setPlayingNoteIdx(null)
-      setIsDragging(true)
-      onPlayStop()
-    }
-
-    if (g.dragging) {
-      const distFromCenter = Math.hypot(x - CX, y - CY)
-      setArmedNoteIdx(distFromCenter <= DROP_ZONE_R ? g.noteIdx : null)
-    }
-  }
-
   function endGesture(e: React.PointerEvent<SVGPathElement>) {
-    const g = gestureRef.current
+    const g = playRef.current
     if (!g || e.pointerId !== g.pointerId) return
-    if (!g.dragging) onPlayStop()
-    const { x, y } = toSvgPoint(e)
-    const inDropZone = g.dragging && Math.hypot(x - CX, y - CY) <= DROP_ZONE_R
-    const result: GestureResult = !g.dragging
-      ? { type: "none" }
-      : inDropZone
-        ? { type: "key", noteIdx: g.noteIdx }
-        : { type: "et" }
-    gestureRef.current = null
+    playRef.current = null
     setPlayingNoteIdx(null)
-    setArmedNoteIdx(null)
-    setIsDragging(false)
-    onGestureEnd(result)
-  }
-
-  function cancelGesture(e: React.PointerEvent<SVGPathElement>) {
-    const g = gestureRef.current
-    if (!g || e.pointerId !== g.pointerId) return
-    if (!g.dragging) onPlayStop()
-    gestureRef.current = null
-    setPlayingNoteIdx(null)
-    setArmedNoteIdx(null)
-    setIsDragging(false)
+    onPlayStop()
   }
 
   return (
     <svg
-      ref={svgRef}
       viewBox="0 0 160 160"
       width={240}
       height={240}
@@ -213,17 +146,11 @@ function PitchWheel({
       {/* Outer ring */}
       <circle cx={CX} cy={CY} r={OUTER_R} fill="var(--bg-surface)" />
       <circle cx={CX} cy={CY} r={OUTER_R} fill="none" stroke="var(--border)" strokeWidth={1} />
-      {/* Inner face — tints accent while a drag is armed to set the key */}
-      <circle
-        cx={CX}
-        cy={CY}
-        r={INNER_R}
-        fill={armedNoteIdx !== null ? wedgeColor(armedNoteIdx, "active") : "var(--bg)"}
-        opacity={armedNoteIdx !== null ? 0.18 : 1}
-      />
+      {/* Inner face */}
+      <circle cx={CX} cy={CY} r={INNER_R} fill="var(--bg)" />
       <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="var(--border)" strokeWidth={0.75} />
 
-      {/* Note segments, dividers, labels, reference-key marker, and play/drag hit targets */}
+      {/* Note segments, dividers, labels, reference-key marker, and tap hit targets */}
       {NOTE_NAMES.map((note, i) => {
         const isDetected = hasNote && i === detectedNoteIdx
         const isPlaying = i === playingNoteIdx
@@ -267,60 +194,16 @@ function PitchWheel({
               fill="transparent"
               style={{ touchAction: "none", cursor: "pointer" }}
               onPointerDown={(e) => handlePointerDown(i, e)}
-              onPointerMove={handlePointerMove}
               onPointerUp={endGesture}
-              onPointerCancel={cancelGesture}
-              aria-label={`Play ${note}, drag to the center to set it as the reference key, or drag away from center to switch to equal temperament`}
+              onPointerCancel={endGesture}
+              aria-label={`Play ${note}`}
             />
           </g>
         )
       })}
 
-      {/* Center: candidate key or ET while a drag is armed, drag hint while held,
-          detected note + octave + cents, or idle hint */}
-      {armedNoteIdx !== null ? (
-        <text
-          x={CX}
-          y={CY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={20}
-          fontWeight="700"
-          fill={wedgeColor(armedNoteIdx, "active")}
-          fontFamily="system-ui, sans-serif"
-          style={{ pointerEvents: "none" }}
-        >
-          {NOTE_NAMES[armedNoteIdx]}
-        </text>
-      ) : isDragging ? (
-        <text
-          x={CX}
-          y={CY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={12}
-          fontWeight="700"
-          fill="var(--text)"
-          fontFamily="system-ui, sans-serif"
-          style={{ pointerEvents: "none" }}
-        >
-          Equal Temp
-        </text>
-      ) : playingNoteIdx !== null ? (
-        <text
-          x={CX}
-          y={CY}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={8}
-          fontWeight="600"
-          fill="var(--text-muted)"
-          fontFamily="system-ui, sans-serif"
-          style={{ pointerEvents: "none" }}
-        >
-          Drag to center
-        </text>
-      ) : hasNote && noteName ? (
+      {/* Center: blank while held, detected note + octave + cents, or idle hint */}
+      {playingNoteIdx !== null ? null : hasNote && noteName ? (
         <>
           <text
             x={CX}
@@ -366,32 +249,18 @@ function PitchWheel({
           </text>
         </>
       ) : (
-        <>
-          <text
-            x={CX}
-            y={CY - 5}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={7.5}
-            fill="var(--text-muted)"
-            fontFamily="system-ui, sans-serif"
-            style={{ pointerEvents: "none" }}
-          >
-            Tap to play
-          </text>
-          <text
-            x={CX}
-            y={CY + 5}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={7.5}
-            fill="var(--text-muted)"
-            fontFamily="system-ui, sans-serif"
-            style={{ pointerEvents: "none" }}
-          >
-            drag to set key
-          </text>
-        </>
+        <text
+          x={CX}
+          y={CY}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={7.5}
+          fill="var(--text-muted)"
+          fontFamily="system-ui, sans-serif"
+          style={{ pointerEvents: "none" }}
+        >
+          Tap to play
+        </text>
       )}
 
       {/* Needle — rotated group for smooth CSS transition */}
@@ -416,6 +285,108 @@ function PitchWheel({
         </g>
       )}
     </svg>
+  )
+}
+
+interface KeyPickerProps {
+  selectedKey: string
+  temperament: "ji" | "et"
+  onSelectKey: (noteIdx: number) => void
+  onSelectET: () => void
+}
+
+function KeyPicker({ selectedKey, temperament, onSelectKey, onSelectET }: KeyPickerProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const selectedIdx = NOTE_NAMES.indexOf(selectedKey)
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    function handlePointerDown(e: PointerEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setIsOpen(false)
+    }
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [isOpen])
+
+  const chipLabel = temperament === "et" ? "Equal Temperament" : selectedKey
+  const chipColor =
+    temperament === "et" ? "var(--text-muted)" : wedgeColor(selectedIdx, "reference")
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        className="flex items-center gap-0.5 py-0 px-1 text-xs bg-transparent border-transparent"
+        style={{ color: chipColor }}
+        onClick={() => setIsOpen((v) => !v)}
+        aria-haspopup="true"
+        aria-expanded={isOpen}
+        aria-label={`Key: ${chipLabel}. Tap to change.`}
+      >
+        Key: {chipLabel}
+        <ChevronDown size={12} />
+      </button>
+      {isOpen && (
+        <div
+          className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 z-10 rounded-lg p-1.5 flex flex-col gap-1.5 w-max"
+          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+          role="menu"
+        >
+          <div className="grid grid-cols-4 gap-1">
+            {NOTE_NAMES.map((note, i) => {
+              const isSelected = temperament === "ji" && i === selectedIdx
+              return (
+                <button
+                  key={note}
+                  type="button"
+                  role="menuitem"
+                  className="rounded px-2 py-1.5 text-[11px] font-semibold border-transparent"
+                  style={{
+                    background: wedgeColor(i, isSelected ? "reference" : "idle"),
+                    color: isSelected ? "var(--note-text-on-active)" : "var(--text)",
+                  }}
+                  onClick={() => {
+                    onSelectKey(i)
+                    setIsOpen(false)
+                  }}
+                  aria-label={note}
+                >
+                  {note}
+                </button>
+              )
+            })}
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            className="rounded px-2 py-1.5 text-[11px] font-semibold"
+            style={{
+              background: temperament === "et" ? "var(--bg)" : "transparent",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+            }}
+            onClick={() => {
+              onSelectET()
+              setIsOpen(false)
+            }}
+            aria-label="Equal Temperament"
+          >
+            Equal Temperament
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -640,21 +611,12 @@ export default function Tuner({
   }
 
   function handlePlayStop() {
+    pausedRef.current = false
     const audio = playAudioRef.current
     if (!audio) return
     audio.osc.stop()
     audio.ctx.close()
     playAudioRef.current = null
-  }
-
-  function handleGestureEnd(result: GestureResult) {
-    pausedRef.current = false
-    if (result.type === "key") {
-      setSelectedKey(NOTE_NAMES[result.noteIdx])
-      setTemperament("ji")
-    } else if (result.type === "et") {
-      setTemperament("et")
-    }
   }
 
   const absC = pitch ? Math.abs(pitch.cents) : 0
@@ -689,13 +651,16 @@ export default function Tuner({
             temperament={temperament}
             onPlayStart={handlePlayStart}
             onPlayStop={handlePlayStop}
-            onGestureEnd={handleGestureEnd}
           />
-          <div className="text-xs pb-1 flex flex-col items-center gap-0.5">
-            <span className="text-[var(--text-muted)]">
-              Key: {temperament === "et" ? "Equal temperament" : selectedKey}
-            </span>
-          </div>
+          <KeyPicker
+            selectedKey={selectedKey}
+            temperament={temperament}
+            onSelectKey={(noteIdx) => {
+              setSelectedKey(NOTE_NAMES[noteIdx])
+              setTemperament("ji")
+            }}
+            onSelectET={() => setTemperament("et")}
+          />
         </div>
       )}
       {!active && error && (
