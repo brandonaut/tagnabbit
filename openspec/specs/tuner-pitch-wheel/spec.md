@@ -47,12 +47,16 @@ The needle and the cents-offset readout (e.g. "+3¢") SHALL continue to use thei
 - **WHEN** a pitch is detected and the cents offset is displayed
 - **THEN** its color reflects how in-tune the pitch is (per the existing accuracy thresholds), regardless of which note's hue is active on the wheel
 
-### Requirement: Consistent enlarged wheel size across all usages
-The pitch wheel SHALL render at the same, modestly increased overall size everywhere the `Tuner` component appears, with no per-page size or behavior divergence.
+### Requirement: Wheel size follows the panel's size state
+The pitch wheel SHALL render at a size determined by the enclosing panel's size state (small or large, per `tuner-panel-size`), rather than at one fixed size everywhere the `Tuner` component appears.
 
-#### Scenario: Wheel size matches between search and tag pages
-- **WHEN** the tuner is opened on the search page and, separately, on a tag page
-- **THEN** the pitch wheel renders at the same increased dimensions and with the same visual behavior in both places
+#### Scenario: Wheel is larger when the panel is in the large state
+- **WHEN** the tuner panel's size state is large
+- **THEN** the pitch wheel renders visibly larger than it does when the panel's size state is small
+
+#### Scenario: Wheel size can differ between search and tag pages
+- **WHEN** the tuner is opened on the search page (defaulting to large) and, separately, on a tag page (defaulting to small)
+- **THEN** the pitch wheel renders at different sizes in each place, reflecting each page's default panel size
 
 ### Requirement: Equal temperament as a second tuning mode
 The tuner SHALL support two temperament modes — just-intonation (relative to a selected reference key) and equal-temperament — as an independent axis from the selected reference key.

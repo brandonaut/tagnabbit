@@ -1,4 +1,4 @@
-import { ChevronDown, CircleGauge } from "lucide-react"
+import { ChevronDown, CircleGauge, Maximize2, Minimize2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { wedgeColor } from "./noteColors"
 import { ENHARMONIC, NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
@@ -462,6 +462,7 @@ interface PitchInfo {
 interface Props {
   defaultKey: string
   defaultTemperament?: "ji" | "et"
+  defaultSize?: "small" | "large"
   variant?: "floating" | "inline"
   visible?: boolean
   collapsible?: boolean
@@ -470,6 +471,7 @@ interface Props {
 export default function Tuner({
   defaultKey,
   defaultTemperament = "ji",
+  defaultSize = "small",
   variant = "floating",
   visible = true,
   collapsible = false,
@@ -479,6 +481,7 @@ export default function Tuner({
   const [error, setError] = useState<string | null>(null)
   const [selectedKey, setSelectedKey] = useState(() => ENHARMONIC[defaultKey] ?? defaultKey)
   const [temperament, setTemperament] = useState<"ji" | "et">(defaultTemperament)
+  const [size, setSize] = useState<"small" | "large">(defaultSize)
 
   const selectedKeyRef = useRef(selectedKey)
   useEffect(() => {
@@ -715,9 +718,25 @@ export default function Tuner({
     >
       {(!collapsible || active) && (
         <div
-          className="rounded-lg p-2 flex flex-col items-center gap-1"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
+          className="relative rounded-lg p-2 flex flex-col items-center gap-1"
+          style={{
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border)",
+            transform: size === "large" ? "scale(1.4)" : "scale(1)",
+            transformOrigin: "bottom right",
+            transition: "transform 0.2s ease-out",
+          }}
         >
+          <button
+            type="button"
+            className="absolute top-1 right-1 p-1 bg-transparent border-transparent"
+            style={{ color: "var(--text-muted)" }}
+            onClick={() => setSize((v) => (v === "large" ? "small" : "large"))}
+            aria-label={size === "large" ? "Shrink tuner" : "Enlarge tuner"}
+            title={size === "large" ? "Shrink tuner" : "Enlarge tuner"}
+          >
+            {size === "large" ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
           <PitchWheel
             detectedNoteIdx={detectedNoteIdx}
             cents={pitch?.cents ?? 0}

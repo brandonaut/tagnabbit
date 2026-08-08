@@ -279,7 +279,12 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
               )}
             </div>
           </div>
-          <Tuner defaultKey={tag.key ? formatKey(tag.key) : "C"} visible={uiVisible} collapsible />
+          <Tuner
+            defaultKey={tag.key ? formatKey(tag.key) : "C"}
+            defaultSize="small"
+            visible={uiVisible}
+            collapsible
+          />
         </>
       )}
     </div>
