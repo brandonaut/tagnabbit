@@ -1,4 +1,5 @@
 import { useRegisterSW } from "virtual:pwa-register/react"
+import { RELEASE_URL } from "./version"
 
 function PWABadge() {
   // check for updates every hour
@@ -35,9 +36,7 @@ function PWABadge() {
             {offlineReady ? (
               <span id="toast-message">App ready to work offline</span>
             ) : (
-              <span id="toast-message">
-                New content available, click on reload button to update.
-              </span>
+              <span id="toast-message">Update available.</span>
             )}
           </div>
           <div>
@@ -49,6 +48,16 @@ function PWABadge() {
               >
                 Reload
               </button>
+            )}
+            {needRefresh && (
+              <a
+                href={RELEASE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="border border-[var(--border)] outline-none mr-[5px] rounded-sm py-[3px] px-[10px] inline-block"
+              >
+                What's new
+              </a>
             )}
             <button
               type="button"

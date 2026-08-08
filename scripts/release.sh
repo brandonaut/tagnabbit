@@ -32,13 +32,13 @@ node -e "
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
 
-# Update APP_VERSION and RELEASE_DATE in SettingsDrawer.tsx
+# Update APP_VERSION and RELEASE_DATE in version.ts
 sed -i \
   -e "s/const APP_VERSION = \"[^\"]*\"/const APP_VERSION = \"$VERSION\"/" \
   -e "s/const RELEASE_DATE = \"[^\"]*\"/const RELEASE_DATE = \"$TODAY\"/" \
-  src/SettingsDrawer.tsx
+  src/version.ts
 
-git add package.json src/SettingsDrawer.tsx
+git add package.json src/version.ts
 git commit -m "Release v$VERSION"
 git tag "v$VERSION"
 

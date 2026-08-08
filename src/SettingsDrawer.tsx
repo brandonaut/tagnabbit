@@ -2,9 +2,7 @@ import { X } from "lucide-react"
 import { useEffect } from "react"
 import githubLogo from "./assets/github.svg"
 import type { TagCacheMeta } from "./cache/tagDatabase"
-
-const APP_VERSION = "0.0.5"
-const RELEASE_DATE = "2026-08-02"
+import { APP_VERSION, RELEASE_DATE, RELEASE_URL } from "./version"
 
 interface Props {
   isOpen: boolean
@@ -98,9 +96,11 @@ export default function SettingsDrawer({
             About
           </h3>
           <p className="text-sm text-[var(--text-muted)] m-0 leading-relaxed">
-            Version {APP_VERSION}
+            v{APP_VERSION} ({RELEASE_DATE})
             <br />
-            Released {RELEASE_DATE}
+            <a href={RELEASE_URL} target="_blank" rel="noopener noreferrer">
+              What's new
+            </a>
           </p>
           <a
             href="https://github.com/brandonaut/tagnabbit"
