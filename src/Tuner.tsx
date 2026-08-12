@@ -8,53 +8,246 @@ import { ENHARMONIC, NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
 // e.g. the major 3rd (5/4) is 386¢, which is 14¢ BELOW the ET major 3rd (400¢) → -13.7
 const JI_OFFSETS = [0, 11.7, 3.9, 15.6, -13.7, -2.0, -9.8, 2.0, 13.7, -15.6, 17.6, -11.7]
 
-function autoCorrelate(buf: Float32Array, sampleRate: number): number {
-  const SIZE = buf.length
+// Each scale degree's JI target in cents above the tonic, plus the distance to the
+// neighbouring target in each direction. These gaps run from 70.7¢ to 133.2¢, which is
+// why the wheel can't map cents to degrees at one fixed rate — see centsToAngle.
+// Degree 11's neighbour above is the octave (1200¢), not degree 0.
+const JI_TARGETS = JI_OFFSETS.map((offset, degree) => degree * 100 + offset)
+const JI_GAP_UP = JI_TARGETS.map((target, degree) =>
+  degree === 11 ? 1200 - target : JI_TARGETS[degree + 1] - target,
+)
+// The gap below a degree is the gap above the degree beneath it.
+const JI_GAP_DOWN = JI_TARGETS.map((_, degree) => JI_GAP_UP[(degree + 11) % 12])
 
+// Detection range: the barbershop voice range.
+const MIN_HZ = 65
+const MAX_HZ = 1050
+const FFT_SIZE = 2048
+// Only fundamentals below MAX_HZ matter, so the signal is decimated before the coarse
+// correlation pass — 16x less work for an O(n²) search. The 8-tap boxcar prefilter has
+// a null at exactly the post-decimation Nyquist and stays below -13 dB above it.
+const DECIM = 4
+const BOXCAR = 8
+const DECIMATED_SIZE = Math.floor((FFT_SIZE - BOXCAR) / DECIM)
+// Coarse peaks resolve to DECIM full-rate samples, so the true peak is within ±DECIM/2
+// decimated samples; this window has ample margin.
+const REFINE_HALF_WIDTH = 16
+// Take the first NSDF peak within this fraction of the global maximum rather than the
+// global maximum itself. Once the function is properly normalized, every integer multiple
+// of the true period is a peak of comparable height, so a plain argmax lands on an
+// arbitrary subharmonic and reports a pitch one or two octaves low.
+const PEAK_RATIO = 0.9
+// NSDF clarity at the chosen peak: 1 is perfectly periodic. Breath and room noise fall far
+// below this.
+const CLARITY = 0.45
+const RMS_FLOOR = 0.001
+// Extra lags searched past each end of the range so peaks at the extremes still have
+// neighbours for the local-maximum test.
+const LAG_MARGIN = 2
+
+// 8-tap boxcar antialias filter applied as a running sum, keeping every DECIM-th output.
+// O(1) per output sample. The output is unscaled — only the argmax of the correlation
+// matters downstream, and the confidence test runs against the full-rate signal.
+function decimate(src: Float32Array, dst: Float32Array): void {
   let sum = 0
-  for (let i = 0; i < SIZE; i++) sum += buf[i] * buf[i]
-  if (sum / SIZE < 0.001) return -1 // raise RMS floor to reject breath/room noise
-
-  const c = new Float32Array(SIZE)
-  for (let i = 0; i < SIZE; i++) {
-    for (let j = 0; j < SIZE - i; j++) {
-      c[i] += buf[j] * buf[j + i]
+  for (let i = 0; i < BOXCAR; i++) sum += src[i]
+  dst[0] = sum
+  let base = 0
+  for (let out = 1; out < dst.length; out++) {
+    for (let k = 0; k < DECIM; k++) {
+      sum += src[base + BOXCAR] - src[base]
+      base++
     }
+    dst[out] = sum
   }
-
-  // Skip initial peak, find first valley
-  let d = 0
-  while (d < SIZE - 1 && c[d] > c[d + 1]) d++
-
-  // Search only in the barbershop voice range (65–1050 Hz)
-  const minLag = Math.floor(sampleRate / 1050)
-  const maxLag = Math.ceil(sampleRate / 65)
-  let maxVal = -1,
-    maxPos = -1
-  for (let i = Math.max(d, minLag); i < Math.min(SIZE - 1, maxLag); i++) {
-    if (c[i] > maxVal) {
-      maxVal = c[i]
-      maxPos = i
-    }
-  }
-
-  if (maxPos < 1 || maxVal < c[0] * 0.05) return -1 // raise confidence threshold
-
-  // Parabolic interpolation for sub-sample accuracy
-  const T0 =
-    maxPos + (c[maxPos + 1] - c[maxPos - 1]) / (2 * (2 * c[maxPos] - c[maxPos - 1] - c[maxPos + 1]))
-
-  return sampleRate / T0
 }
 
-function freqToNote(freq: number): { note: string; octave: number; cents: number } {
-  const semitones = 12 * Math.log2(freq / 440)
-  const rounded = Math.round(semitones)
-  const cents = Math.round((semitones - rounded) * 100)
+// power[k] = sum of squares of buf[0..k), so the NSDF denominator over any lag's overlap
+// window is one subtraction rather than a second inner loop.
+function buildPower(buf: Float32Array, size: number, power: Float32Array): void {
+  power[0] = 0
+  for (let i = 0; i < size; i++) power[i + 1] = power[i] + buf[i] * buf[i]
+}
+
+// Normalized square difference function (McLeod). Bounded to [-1, 1] and 1 at perfect
+// periodicity, so peak heights are comparable across lags and across input levels. A raw
+// correlation sum is neither: it attenuates long lags, which biases toward reporting a
+// pitch an octave high whenever the fundamental is weak relative to the 2nd harmonic —
+// the common case for low bass on a phone mic.
+function nsdf(
+  buf: Float32Array,
+  size: number,
+  lo: number,
+  hi: number,
+  power: Float32Array,
+  out: Float32Array,
+): void {
+  for (let lag = lo; lag <= hi; lag++) {
+    const n = size - lag
+    let r = 0
+    for (let j = 0; j < n; j++) r += buf[j] * buf[j + lag]
+    const m = power[n] + power[size] - power[lag]
+    out[lag - lo] = m > 0 ? (2 * r) / m : 0
+  }
+}
+
+// The first peak within PEAK_RATIO of the tallest one, as an index into `out`. Taking the
+// tallest peak outright is wrong: multiples of the true period score just as high once the
+// function is normalized, so an argmax picks a subharmonic more or less at random.
+function firstStrongPeak(out: Float32Array, count: number): number {
+  let tallest = 0
+  for (let i = 0; i < count; i++) if (out[i] > tallest) tallest = out[i]
+  if (tallest <= 0) return -1
+  const threshold = tallest * PEAK_RATIO
+  for (let i = 1; i < count - 1; i++) {
+    if (out[i] > out[i - 1] && out[i] >= out[i + 1] && out[i] >= threshold) return i
+  }
+  return -1
+}
+
+// Recompute at full sample rate in a narrow window around the coarse peak, then
+// parabolic-interpolate. Interpolating on the decimated peak alone is far too coarse: a
+// 1050 Hz fundamental is only ~11 decimated samples per period, which carries ~15¢ of
+// systematic bias. The window holds a single peak, so a plain argmax is right here.
+function refinePeak(
+  buf: Float32Array,
+  size: number,
+  center: number,
+  minLag: number,
+  maxLag: number,
+  power: Float32Array,
+  scratch: Float32Array,
+): { lag: number; clarity: number } {
+  const lo = Math.max(minLag, center - REFINE_HALF_WIDTH)
+  const hi = Math.min(maxLag, center + REFINE_HALF_WIDTH)
+  nsdf(buf, size, lo, hi, power, scratch)
+  let best = Number.NEGATIVE_INFINITY
+  let at = lo
+  for (let lag = lo; lag <= hi; lag++) {
+    if (scratch[lag - lo] > best) {
+      best = scratch[lag - lo]
+      at = lag
+    }
+  }
+  if (at <= lo || at >= hi) return { lag: at, clarity: best }
+  const left = scratch[at - lo - 1]
+  const mid = scratch[at - lo]
+  const right = scratch[at - lo + 1]
+  const denom = 2 * (2 * mid - left - right)
+  return { lag: denom === 0 ? at : at + (right - left) / denom, clarity: best }
+}
+
+interface DetectBuffers {
+  decimated: Float32Array
+  power: Float32Array
+  coarsePower: Float32Array
+  coarse: Float32Array
+  scratch: Float32Array
+}
+
+function detectPitch(buf: Float32Array, b: DetectBuffers, sampleRate: number): number {
+  const size = buf.length
+  buildPower(buf, size, b.power)
+  if (b.power[size] / size < RMS_FLOOR) return -1 // reject breath and room noise
+
+  decimate(buf, b.decimated)
+  const coarseSize = b.decimated.length
+  const coarseRate = sampleRate / DECIM
+  // LAG_MARGIN past each end of the range: a peak sitting on the very first or last lag
+  // has no neighbour to be compared against, so the local-maximum test cannot see it and
+  // the pitch at that edge of the range gets missed entirely.
+  const coarseLo = Math.max(2, Math.floor(coarseRate / MAX_HZ) - LAG_MARGIN)
+  const coarseHi = Math.min(coarseSize - 2, Math.ceil(coarseRate / MIN_HZ) + LAG_MARGIN)
+  buildPower(b.decimated, coarseSize, b.coarsePower)
+  nsdf(b.decimated, coarseSize, coarseLo, coarseHi, b.coarsePower, b.coarse)
+  const peak = firstStrongPeak(b.coarse, coarseHi - coarseLo + 1)
+  if (peak < 0) return -1
+
+  const { lag, clarity } = refinePeak(
+    buf,
+    size,
+    (coarseLo + peak) * DECIM,
+    Math.max(2, Math.floor(sampleRate / MAX_HZ) - LAG_MARGIN * DECIM),
+    Math.min(size - 2, Math.ceil(sampleRate / MIN_HZ) + LAG_MARGIN * DECIM),
+    b.power,
+    b.scratch,
+  )
+  if (lag <= 0 || clarity < CLARITY) return -1
+  return sampleRate / lag
+}
+
+// Cents above A440. The smoothing pipeline works in this domain rather than in linear Hz
+// so that a given interval settles at the same rate in every register.
+function freqToCents(freq: number): number {
+  return 1200 * Math.log2(freq / 440)
+}
+
+// A tuning target the arc can be flush with: one of the 12 notes in ET, or one of the 12
+// JI targets for the current key. The gaps are the distances to the neighbouring targets,
+// which set both the wedge's angular scale and where its edges fall.
+interface Target {
+  semitone: number // semitones above A440, so it carries the octave
+  targetCents: number // the target's own position, in cents above A440
+  gapUp: number
+  gapDown: number
+}
+
+function etTarget(cents: number): Target {
+  const semitone = Math.round(cents / 100)
+  return { semitone, targetCents: semitone * 100, gapUp: 100, gapDown: 100 }
+}
+
+function jiTarget(cents: number, keyIdx: number): Target {
+  const tonic = (keyIdx - 9) * 100 // C is 9 semitones below A440
+  const octave = Math.floor((cents - tonic) / 1200)
+  const within = cents - tonic - octave * 1200
+  let degree = 0
+  let oct = octave
+  let bestDist = Number.POSITIVE_INFINITY
+  for (let d = 0; d < 12; d++) {
+    const dist = Math.abs(within - JI_TARGETS[d])
+    if (dist < bestDist) {
+      bestDist = dist
+      degree = d
+    }
+  }
+  // The tonic an octave up is nearer than any degree in this one.
+  if (Math.abs(within - 1200) < bestDist) {
+    degree = 0
+    oct = octave + 1
+  }
+  const targetCents = tonic + oct * 1200 + JI_TARGETS[degree]
+  return {
+    semitone: Math.round(targetCents / 100),
+    targetCents,
+    gapUp: JI_GAP_UP[degree],
+    gapDown: JI_GAP_DOWN[degree],
+  }
+}
+
+function nearestTarget(cents: number, temperament: "ji" | "et", keyIdx: number): Target {
+  return temperament === "ji" && keyIdx >= 0 ? jiTarget(cents, keyIdx) : etTarget(cents)
+}
+
+function semitoneToNote(semitone: number): { note: string; octave: number } {
   // A4 = semitone 0 = index 9 = octave 4
-  const noteIdx = ((rounded % 12) + 12 + 9) % 12
-  const octave = Math.floor((rounded + 57) / 12)
-  return { note: NOTE_NAMES[noteIdx], octave, cents }
+  const noteIdx = ((semitone % 12) + 12 + 9) % 12
+  return { note: NOTE_NAMES[noteIdx], octave: Math.floor((semitone + 57) / 12) }
+}
+
+// Piecewise linear between tuning targets. Every wedge is 30° wide, but the pitch span it
+// represents is the gap to its neighbour, so the arc reaches the wedge edge exactly at the
+// midpoint between two targets however far apart they are. Mapping at a fixed 0.3°/cent
+// instead — as this did before — tears the wheel by up to 8.8° where JI intervals are
+// narrower than a semitone, and freezes the arc across 33¢ where they are wider. In ET
+// every gap is 100¢ and this reduces to the old fixed rate.
+function centsToAngle(deviation: number, target: Target): number {
+  const gap = deviation >= 0 ? target.gapUp : target.gapDown
+  return Math.max(-15, Math.min(15, (30 * deviation) / gap))
+}
+
+function median3(a: number, b: number, c: number): number {
+  return Math.max(Math.min(a, b), Math.min(Math.max(a, b), c))
 }
 
 // Wheel SVG geometry
@@ -63,8 +256,12 @@ const CY = 80
 const OUTER_R = 73
 const INNER_R = 42
 const LABEL_R = 58
-const NEEDLE_TIP_R = 40
-const NEEDLE_BASE_R = 30
+// The accuracy arc sits just inside the wedge ring, leaving a 1-unit seam at INNER_R to
+// read alignment against. Dividers reach past it so every wedge edge continues across the
+// band — without that the arc has nothing to be judged against.
+const ARC_OUTER_R = 41
+const ARC_INNER_R = 33
+const DIVIDER_INNER_R = 32
 
 function toXY(angleDeg: number, r: number): { x: number; y: number } {
   const rad = ((angleDeg - 90) * Math.PI) / 180
@@ -79,19 +276,26 @@ function angleToNoteIdx(x: number, y: number): number {
   return ((idx % 12) + 12) % 12
 }
 
+// A 30°-wide ring segment centred on an arbitrary angle. Wedges are pinned to multiples
+// of 30°; the accuracy arc is the same shape free to sit anywhere.
+function ringSegment(centerDeg: number, innerR: number, outerR: number): string {
+  const start = centerDeg - 15
+  const end = centerDeg + 15
+  const o1 = toXY(start, outerR)
+  const o2 = toXY(end, outerR)
+  const i2 = toXY(end, innerR)
+  const i1 = toXY(start, innerR)
+  return `M ${o1.x} ${o1.y} A ${outerR} ${outerR} 0 0 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${innerR} ${innerR} 0 0 0 ${i1.x} ${i1.y} Z`
+}
+
 function segmentArc(noteIdx: number): string {
-  const start = noteIdx * 30 - 15
-  const end = noteIdx * 30 + 15
-  const o1 = toXY(start, OUTER_R)
-  const o2 = toXY(end, OUTER_R)
-  const i2 = toXY(end, INNER_R)
-  const i1 = toXY(start, INNER_R)
-  return `M ${o1.x} ${o1.y} A ${OUTER_R} ${OUTER_R} 0 0 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${INNER_R} ${INNER_R} 0 0 0 ${i1.x} ${i1.y} Z`
+  return ringSegment(noteIdx * 30, INNER_R, OUTER_R)
 }
 
 interface WheelProps {
   detectedNoteIdx: number | null
   cents: number
+  angleOffset: number
   color: string
   noteName: string | null
   octave: number | null
@@ -105,6 +309,7 @@ interface WheelProps {
 function PitchWheel({
   detectedNoteIdx,
   cents,
+  angleOffset,
   color,
   noteName,
   octave,
@@ -115,11 +320,12 @@ function PitchWheel({
   onPlayStop,
 }: WheelProps) {
   const hasNote = detectedNoteIdx !== null
-  // Each note occupies 30°; ±50¢ spans ±15° (half a semitone). Clamp so
-  // JI-adjusted cents > ±50 don't push the needle past the segment boundary.
-  const needleAngle = hasNote
-    ? detectedNoteIdx * 30 + (Math.max(-50, Math.min(50, cents)) / 50) * 15
-    : 0
+
+  // The arc stays mounted so it can fade rather than vanish when the reading clears, so
+  // its last angle is held here — otherwise it would swing back to C mid-fade.
+  const lastArcAngleRef = useRef(0)
+  if (hasNote) lastArcAngleRef.current = detectedNoteIdx * 30 + angleOffset
+  const arcAngle = lastArcAngleRef.current
 
   const svgRef = useRef<SVGSVGElement>(null)
   // Each active pointer glides independently; noteIdx is whichever wedge that
@@ -181,6 +387,22 @@ function PitchWheel({
       <circle cx={CX} cy={CY} r={INNER_R} fill="var(--bg)" />
       <circle cx={CX} cy={CY} r={INNER_R} fill="none" stroke="var(--border)" strokeWidth={0.75} />
 
+      {/* Accuracy arc — one wedge wide, so being in tune means it sits flush with the
+          detected wedge. Drawn before the segments so the dividers paint over it. The
+          rotation transition is about one frame: the smoothing filter has already done
+          the smoothing, and anything longer here is pure added lag. */}
+      <g
+        style={{
+          transform: `rotate(${arcAngle}deg)`,
+          transformOrigin: `${CX}px ${CY}px`,
+          opacity: hasNote ? 1 : 0,
+          transition: "transform 0.03s linear, opacity 0.3s ease-out",
+          pointerEvents: "none",
+        }}
+      >
+        <path d={ringSegment(0, ARC_INNER_R, ARC_OUTER_R)} fill={color} />
+      </g>
+
       {/* Note segments, dividers, labels, reference-key marker, and tap hit targets */}
       {NOTE_NAMES.map((note, i) => {
         const isDetected = hasNote && i === detectedNoteIdx
@@ -188,7 +410,7 @@ function PitchWheel({
         const isActive = isDetected || isPlaying
         const isReference = i === referenceNoteIdx && temperament === "ji"
         const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
-        const { x: dx1, y: dy1 } = toXY(i * 30 - 15, INNER_R)
+        const { x: dx1, y: dy1 } = toXY(i * 30 - 15, DIVIDER_INNER_R)
         const { x: dx2, y: dy2 } = toXY(i * 30 - 15, OUTER_R)
         const display = NOTE_DISPLAY[i]
         const textFill = isActive ? "var(--note-text-on-active)" : "var(--text)"
@@ -314,28 +536,6 @@ function PitchWheel({
           </text>
         </>
       ) : null}
-
-      {/* Needle — rotated group for smooth CSS transition */}
-      {hasNote && (
-        <g
-          style={{
-            transform: `rotate(${needleAngle}deg)`,
-            transformOrigin: `${CX}px ${CY}px`,
-            transition: "transform 0.08s ease-out",
-          }}
-        >
-          <line
-            x1={CX}
-            y1={CY - NEEDLE_BASE_R}
-            x2={CX}
-            y2={CY - NEEDLE_TIP_R}
-            stroke={color}
-            strokeWidth={2}
-            strokeLinecap="round"
-          />
-          <circle cx={CX} cy={CY - NEEDLE_TIP_R} r={3} fill={color} />
-        </g>
-      )}
     </svg>
   )
 }
@@ -457,7 +657,19 @@ interface PitchInfo {
   note: string
   octave: number
   cents: number
+  angleOffset: number
 }
+
+// ~60 fps. The old 80 ms throttle (~12 fps) meant every stage downstream paid for it.
+const TICK_INTERVAL_MS = 15
+const EMA_ALPHA = 0.4
+// A reading further than this from the smoothed value is a deliberate note change, not
+// drift or vibrato, so the filter snaps to it rather than gliding through every pitch in
+// between. Above the widest plausible vibrato, below a semitone.
+const JUMP_CENTS = 70
+// How far past a wedge edge the pitch must go before the displayed note flips.
+const HYSTERESIS_CENTS = 5
+const SILENCE_HOLD_MS = 300
 
 interface Props {
   defaultKey: string
@@ -484,13 +696,19 @@ export default function Tuner({
   const [size, setSize] = useState<"small" | "large">(defaultSize)
 
   const selectedKeyRef = useRef(selectedKey)
+  const temperamentRef = useRef(temperament)
+  // The sticky target below is derived from the key and temperament, so it has to be
+  // dropped when either changes or the wheel keeps aiming at the old tuning.
+  const displayedTargetRef = useRef<Target | null>(null)
+
   useEffect(() => {
     selectedKeyRef.current = selectedKey
+    displayedTargetRef.current = null
   }, [selectedKey])
 
-  const temperamentRef = useRef(temperament)
   useEffect(() => {
     temperamentRef.current = temperament
+    displayedTargetRef.current = null
   }, [temperament])
 
   const audioRef = useRef<{
@@ -498,14 +716,17 @@ export default function Tuner({
     analyser: AnalyserNode
     stream: MediaStream
     buffer: Float32Array<ArrayBuffer>
+    buffers: DetectBuffers
   } | null>(null)
   const animRef = useRef<number>(0)
   const lastTickRef = useRef<number>(0)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Smoothing: EMA on raw frequency + note-name stability over 2 frames
-  const smoothedFreqRef = useRef(0)
-  const pendingNoteRef = useRef("")
-  const pendingFramesRef = useRef(0)
+  // Smoothing, all in the cents domain: median-of-3 to reject single bad frames, then a
+  // light EMA. The displayed target is sticky so the note name has hysteresis at wedge
+  // edges rather than depending on frames agreeing with each other.
+  const historyRef = useRef<[number, number, number]>([0, 0, 0])
+  const historyCountRef = useRef(0)
+  const smoothedCentsRef = useRef<number | null>(null)
   // Shared across all concurrent wheel gestures; created lazily on the first
   // press and closed once every gesture has released.
   const sharedAudioCtxRef = useRef<AudioContext | null>(null)
@@ -513,9 +734,9 @@ export default function Tuner({
   const gesturesAudioRef = useRef<Map<number, { osc: OscillatorNode; gain: GainNode }>>(new Map())
 
   const resetSmoothing = useCallback(() => {
-    smoothedFreqRef.current = 0
-    pendingNoteRef.current = ""
-    pendingFramesRef.current = 0
+    historyCountRef.current = 0
+    smoothedCentsRef.current = null
+    displayedTargetRef.current = null
   }, [])
 
   const stop = useCallback(() => {
@@ -568,19 +789,33 @@ export default function Tuner({
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        // The browser enables all three by default. They are tuned for speech and are
+        // hostile to sustained tones: gain control destabilizes the RMS floor, noise
+        // suppression distorts held notes, and echo cancellation tries to subtract the
+        // pitch-pipe tone this app plays. Advisory — a browser may ignore them.
+        audio: { autoGainControl: false, noiseSuppression: false, echoCancellation: false },
+        video: false,
+      })
       const ctx = new AudioContext()
       const source = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
-      analyser.fftSize = 2048
+      analyser.fftSize = FFT_SIZE
       source.connect(analyser)
       const buffer = new Float32Array(analyser.fftSize)
-      audioRef.current = { ctx, analyser, stream, buffer }
+      // Allocated once and reused; the tick loop must not allocate.
+      const buffers: DetectBuffers = {
+        decimated: new Float32Array(DECIMATED_SIZE),
+        power: new Float32Array(FFT_SIZE + 1),
+        coarsePower: new Float32Array(DECIMATED_SIZE + 1),
+        coarse: new Float32Array(DECIMATED_SIZE),
+        scratch: new Float32Array(REFINE_HALF_WIDTH * 2 + 1),
+      }
+      audioRef.current = { ctx, analyser, stream, buffer, buffers }
       setActive(true)
 
       function tick(timestamp: number) {
-        if (timestamp - lastTickRef.current < 80) {
-          // ~12 fps
+        if (timestamp - lastTickRef.current < TICK_INTERVAL_MS) {
           animRef.current = requestAnimationFrame(tick)
           return
         }
@@ -598,50 +833,63 @@ export default function Tuner({
         if (!audio) return
 
         audio.analyser.getFloatTimeDomainData(audio.buffer)
-        const freq = autoCorrelate(audio.buffer, audio.ctx.sampleRate)
+        const freq = detectPitch(audio.buffer, audio.buffers, audio.ctx.sampleRate)
 
         if (freq > 0) {
           if (silenceTimerRef.current) {
             clearTimeout(silenceTimerRef.current)
             silenceTimerRef.current = null
           }
-          // EMA smoothing: blend 25% new reading into the running average
-          smoothedFreqRef.current =
-            smoothedFreqRef.current === 0 ? freq : 0.25 * freq + 0.75 * smoothedFreqRef.current
 
-          const result = freqToNote(smoothedFreqRef.current)
+          const raw = freqToCents(freq)
+          const history = historyRef.current
+          history[historyCountRef.current % 3] = raw
+          historyCountRef.current++
+          const median =
+            historyCountRef.current >= 3 ? median3(history[0], history[1], history[2]) : raw
 
-          // In JI mode, shift cents relative to the JI target for this scale degree.
-          // In ET mode, use the raw equal-tempered cents as-is.
-          let displayCents = result.cents
-          if (temperamentRef.current === "ji") {
-            const keyIdx = NOTE_NAMES.indexOf(selectedKeyRef.current)
-            const noteIdx = NOTE_NAMES.indexOf(result.note)
-            const degreeIdx = keyIdx >= 0 && noteIdx >= 0 ? (noteIdx - keyIdx + 12) % 12 : -1
-            if (degreeIdx >= 0) {
-              displayCents = Math.round(result.cents - JI_OFFSETS[degreeIdx])
-            }
-          }
-
-          // Require 2 consecutive frames on the same note before updating name
-          if (result.note !== pendingNoteRef.current) {
-            pendingNoteRef.current = result.note
-            pendingFramesRef.current = 1
+          const smoothedBefore = smoothedCentsRef.current
+          if (smoothedBefore === null || Math.abs(median - smoothedBefore) > JUMP_CENTS) {
+            // A deliberate note change. Land on it rather than sweeping through every
+            // pitch in between and rendering notes that were never sung.
+            smoothedCentsRef.current = median
+            displayedTargetRef.current = null
           } else {
-            pendingFramesRef.current++
+            smoothedCentsRef.current = EMA_ALPHA * median + (1 - EMA_ALPHA) * smoothedBefore
           }
+          const smoothed = smoothedCentsRef.current
 
-          setPitch((prev) => ({
-            note: pendingFramesRef.current >= 2 ? result.note : (prev?.note ?? result.note),
-            octave: pendingFramesRef.current >= 2 ? result.octave : (prev?.octave ?? result.octave),
-            cents: displayCents,
-          }))
+          // Hysteresis: hold the current target until the pitch passes a little past the
+          // wedge edge, which in JI is the midpoint between adjacent just targets.
+          const target = displayedTargetRef.current
+          const deviation = target === null ? 0 : smoothed - target.targetCents
+          const held =
+            target !== null &&
+            deviation <= target.gapUp / 2 + HYSTERESIS_CENTS &&
+            deviation >= -target.gapDown / 2 - HYSTERESIS_CENTS
+          const current = held
+            ? target
+            : nearestTarget(
+                smoothed,
+                temperamentRef.current,
+                NOTE_NAMES.indexOf(selectedKeyRef.current),
+              )
+          displayedTargetRef.current = current
+
+          const offset = smoothed - current.targetCents
+          const { note, octave } = semitoneToNote(current.semitone)
+          setPitch({
+            note,
+            octave,
+            cents: Math.round(offset),
+            angleOffset: centsToAngle(offset, current),
+          })
         } else if (!silenceTimerRef.current) {
           silenceTimerRef.current = setTimeout(() => {
             setPitch(null)
             resetSmoothing()
             silenceTimerRef.current = null
-          }, 1500)
+          }, SILENCE_HOLD_MS)
         }
 
         animRef.current = requestAnimationFrame(tick)
@@ -740,6 +988,7 @@ export default function Tuner({
           <PitchWheel
             detectedNoteIdx={detectedNoteIdx}
             cents={pitch?.cents ?? 0}
+            angleOffset={pitch?.angleOffset ?? 0}
             color={centsColor}
             noteName={active ? (pitch?.note ?? null) : null}
             octave={active ? (pitch?.octave ?? null) : null}
