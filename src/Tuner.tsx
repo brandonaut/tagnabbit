@@ -1,4 +1,4 @@
-import { ChevronDown, CircleGauge, Maximize2, Minimize2 } from "lucide-react"
+import { CircleGauge, Maximize2, Minimize2, Pencil } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { wedgeColor } from "./noteColors"
 import { ENHARMONIC, NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
@@ -301,9 +301,12 @@ interface WheelProps {
   octave: number | null
   referenceNoteIdx: number
   temperament: "ji" | "et"
+  pickingKey: boolean
   onPlayStart: (pointerId: number, noteIdx: number) => void
   onNoteChange: (pointerId: number, noteIdx: number) => void
   onPlayStop: (pointerId: number) => void
+  onSelectKey: (noteIdx: number) => void
+  onSelectET: () => void
 }
 
 function PitchWheel({
@@ -315,9 +318,12 @@ function PitchWheel({
   octave,
   referenceNoteIdx,
   temperament,
+  pickingKey,
   onPlayStart,
   onNoteChange,
   onPlayStop,
+  onSelectKey,
+  onSelectET,
 }: WheelProps) {
   const hasNote = detectedNoteIdx !== null
 
@@ -342,6 +348,10 @@ function PitchWheel({
   }
 
   function handlePointerDown(noteIdx: number, e: React.PointerEvent<SVGPathElement>) {
+    if (pickingKey) {
+      onSelectKey(noteIdx)
+      return
+    }
     if (gesturesRef.current.has(e.pointerId)) return
     e.currentTarget.setPointerCapture(e.pointerId)
     gesturesRef.current.set(e.pointerId, noteIdx)
@@ -415,9 +425,11 @@ function PitchWheel({
         const display = NOTE_DISPLAY[i]
         const textFill = isActive ? "var(--note-text-on-active)" : "var(--text)"
 
+        const wedgeTier = pickingKey ? "selectable" : isActive ? "active" : "idle"
+
         return (
           <g key={note}>
-            <path d={segmentArc(i)} fill={wedgeColor(i, isActive ? "active" : "idle")} />
+            <path d={segmentArc(i)} fill={wedgeColor(i, wedgeTier)} />
             <line x1={dx1} y1={dy1} x2={dx2} y2={dy2} stroke="var(--border)" strokeWidth={0.75} />
             {display ? (
               <>
@@ -483,14 +495,52 @@ function PitchWheel({
               onPointerMove={handlePointerMove}
               onPointerUp={endGesture}
               onPointerCancel={endGesture}
-              aria-label={`Play ${note}, or drag across the ring to play other notes as you cross them`}
+              aria-label={
+                pickingKey
+                  ? `Set ${note} as the reference key`
+                  : `Play ${note}, or drag across the ring to play other notes as you cross them`
+              }
             />
           </g>
         )
       })}
 
-      {/* Center: blank while any note is playing, otherwise detected note + octave + cents */}
-      {activeNoteIdxs.size > 0 ? null : hasNote && noteName ? (
+      {/* Center: Equal Temp. button while picking a key, blank while any note is playing,
+          otherwise detected note + octave + cents */}
+      {pickingKey ? (
+        // biome-ignore lint/a11y/useSemanticElements: SVG has no native button element to swap to
+        <g
+          onClick={onSelectET}
+          role="button"
+          tabIndex={0}
+          aria-label="Select equal temperament"
+          style={{ cursor: "pointer" }}
+        >
+          <rect
+            x={CX - 26}
+            y={CY - 11}
+            width={52}
+            height={22}
+            rx={6}
+            fill="var(--bg-surface)"
+            stroke="var(--border)"
+            strokeWidth={1.25}
+          />
+          <text
+            x={CX}
+            y={CY + 1}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={8}
+            fontWeight="600"
+            fill="var(--text)"
+            fontFamily="system-ui, sans-serif"
+            style={{ pointerEvents: "none" }}
+          >
+            Equal Temp.
+          </text>
+        </g>
+      ) : activeNoteIdxs.size > 0 ? null : hasNote && noteName ? (
         <>
           <text
             x={CX}
@@ -543,113 +593,28 @@ function PitchWheel({
 interface KeyPickerProps {
   selectedKey: string
   temperament: "ji" | "et"
-  onSelectKey: (noteIdx: number) => void
-  onSelectET: () => void
+  pickingKey: boolean
+  onToggle: () => void
 }
 
-function KeyPicker({ selectedKey, temperament, onSelectKey, onSelectET }: KeyPickerProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+function KeyPicker({ selectedKey, temperament, pickingKey, onToggle }: KeyPickerProps) {
   const selectedIdx = NOTE_NAMES.indexOf(selectedKey)
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    function handlePointerDown(e: PointerEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setIsOpen(false)
-    }
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [isOpen])
-
-  const chipLabel = temperament === "et" ? "Equal Temperament" : selectedKey
+  const chipLabel = temperament === "et" ? "Equal Temp." : `Key: ${selectedKey}`
   const chipColor =
     temperament === "et" ? "var(--text-muted)" : wedgeColor(selectedIdx, "reference")
 
   return (
-    <div className="relative" ref={containerRef}>
-      <button
-        type="button"
-        className="flex items-center gap-0.5 py-0 px-1 text-xs bg-transparent border-transparent"
-        style={{ color: chipColor }}
-        onClick={() => setIsOpen((v) => !v)}
-        aria-haspopup="true"
-        aria-expanded={isOpen}
-        aria-label={`Key: ${chipLabel}. Tap to change.`}
-      >
-        Key: {chipLabel}
-        <ChevronDown size={12} />
-      </button>
-      {isOpen && (
-        <div
-          className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 z-10 rounded-lg p-1.5 flex flex-col gap-1.5 w-max"
-          style={{ background: "var(--bg-surface)", border: "1px solid var(--border)" }}
-          role="menu"
-        >
-          <div className="grid grid-cols-4 gap-1">
-            {NOTE_NAMES.map((note, i) => {
-              const isSelected = temperament === "ji" && i === selectedIdx
-              const display = NOTE_DISPLAY[i]
-              const cellColor = isSelected ? "var(--note-text-on-active)" : "var(--text)"
-              return (
-                <button
-                  key={note}
-                  type="button"
-                  role="menuitem"
-                  className="rounded px-2 h-8 flex flex-col items-center justify-center leading-none border-transparent"
-                  style={{
-                    background: wedgeColor(i, isSelected ? "reference" : "idle"),
-                    color: cellColor,
-                  }}
-                  onClick={() => {
-                    onSelectKey(i)
-                    setIsOpen(false)
-                  }}
-                  aria-label={display ? `${display[0]}, ${display[1]}` : note}
-                >
-                  {display ? (
-                    <>
-                      <span className="text-[10px] font-semibold">{display[0]}</span>
-                      <span className="text-[8px]" style={{ opacity: 0.6 }}>
-                        {display[1]}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-[11px] font-semibold">{note}</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-          <button
-            type="button"
-            role="menuitem"
-            className="rounded px-2 py-1.5 text-[11px] font-semibold"
-            style={{
-              background: temperament === "et" ? "var(--bg)" : "transparent",
-              color: "var(--text)",
-              border: "1px solid var(--border)",
-            }}
-            onClick={() => {
-              onSelectET()
-              setIsOpen(false)
-            }}
-            aria-label="Equal Temperament"
-          >
-            Equal Temperament
-          </button>
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      className={`flex items-center gap-1 py-0.5 px-1.5 text-xs rounded${pickingKey ? " bg-[#646cff] border-[#646cff] text-white" : " bg-transparent border-transparent"}`}
+      style={pickingKey ? undefined : { color: chipColor }}
+      onClick={onToggle}
+      aria-pressed={pickingKey}
+      aria-label={`${chipLabel}. Tap to ${pickingKey ? "stop" : "start"} choosing a key on the wheel.`}
+    >
+      {chipLabel}
+      <Pencil size={12} />
+    </button>
   )
 }
 
@@ -694,6 +659,32 @@ export default function Tuner({
   const [selectedKey, setSelectedKey] = useState(() => ENHARMONIC[defaultKey] ?? defaultKey)
   const [temperament, setTemperament] = useState<"ji" | "et">(defaultTemperament)
   const [size, setSize] = useState<"small" | "large">(defaultSize)
+  const [pickingKey, setPickingKey] = useState(false)
+  const wheelAreaRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!pickingKey) return
+
+    function handlePointerDown(e: PointerEvent) {
+      if (wheelAreaRef.current && !wheelAreaRef.current.contains(e.target as Node)) {
+        setPickingKey(false)
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setPickingKey(false)
+    }
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [pickingKey])
+
+  const pickingKeyRef = useRef(pickingKey)
+  useEffect(() => {
+    pickingKeyRef.current = pickingKey
+  }, [pickingKey])
 
   const selectedKeyRef = useRef(selectedKey)
   const temperamentRef = useRef(temperament)
@@ -821,10 +812,9 @@ export default function Tuner({
         }
         lastTickRef.current = timestamp
 
-        if (gesturesAudioRef.current.size > 0) {
-          // A wheel note is playing — skip analysis so the needle freezes
-          // instead of reacting to the played tone. Resumes only once every
-          // concurrent gesture has released.
+        if (gesturesAudioRef.current.size > 0 || pickingKeyRef.current) {
+          // A wheel note is playing, or the user is picking a key — skip analysis so
+          // the mic doesn't drive the display while attention is on the wheel/chip.
           animRef.current = requestAnimationFrame(tick)
           return
         }
@@ -985,28 +975,37 @@ export default function Tuner({
           >
             {size === "large" ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
-          <PitchWheel
-            detectedNoteIdx={detectedNoteIdx}
-            cents={pitch?.cents ?? 0}
-            angleOffset={pitch?.angleOffset ?? 0}
-            color={centsColor}
-            noteName={active ? (pitch?.note ?? null) : null}
-            octave={active ? (pitch?.octave ?? null) : null}
-            referenceNoteIdx={referenceNoteIdx}
-            temperament={temperament}
-            onPlayStart={handlePlayStart}
-            onNoteChange={handleNoteChange}
-            onPlayStop={handlePlayStop}
-          />
-          <KeyPicker
-            selectedKey={selectedKey}
-            temperament={temperament}
-            onSelectKey={(noteIdx) => {
-              setSelectedKey(NOTE_NAMES[noteIdx])
-              setTemperament("ji")
-            }}
-            onSelectET={() => setTemperament("et")}
-          />
+          <div ref={wheelAreaRef} className="flex flex-col items-center gap-1">
+            <PitchWheel
+              detectedNoteIdx={detectedNoteIdx}
+              cents={pitch?.cents ?? 0}
+              angleOffset={pitch?.angleOffset ?? 0}
+              color={centsColor}
+              noteName={active ? (pitch?.note ?? null) : null}
+              octave={active ? (pitch?.octave ?? null) : null}
+              referenceNoteIdx={referenceNoteIdx}
+              temperament={temperament}
+              pickingKey={pickingKey}
+              onPlayStart={handlePlayStart}
+              onNoteChange={handleNoteChange}
+              onPlayStop={handlePlayStop}
+              onSelectKey={(noteIdx) => {
+                setSelectedKey(NOTE_NAMES[noteIdx])
+                setTemperament("ji")
+                setPickingKey(false)
+              }}
+              onSelectET={() => {
+                setTemperament("et")
+                setPickingKey(false)
+              }}
+            />
+            <KeyPicker
+              selectedKey={selectedKey}
+              temperament={temperament}
+              pickingKey={pickingKey}
+              onToggle={() => setPickingKey((v) => !v)}
+            />
+          </div>
         </div>
       )}
       {!active && error && (

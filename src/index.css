@@ -28,6 +28,8 @@
     --note-c-reference: 0.12;
     --note-l-active: 0.75;
     --note-c-active: 0.17;
+    --note-l-selectable: 0.5;
+    --note-c-selectable: 0.11;
     --note-text-on-active: #10141e;
 
     color: var(--text);
@@ -49,6 +51,8 @@
       --note-c-reference: 0.13;
       --note-l-active: 0.58;
       --note-c-active: 0.18;
+      --note-l-selectable: 0.75;
+      --note-c-selectable: 0.11;
 
       color: var(--text);
       background-color: var(--bg);

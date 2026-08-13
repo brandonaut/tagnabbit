@@ -1,4 +1,4 @@
-export type WedgeColorTier = "idle" | "reference" | "active"
+export type WedgeColorTier = "idle" | "reference" | "active" | "selectable"
 
 // Each note's hue matches its 30°-per-wedge position on the pitch wheel, so
 // color-wheel position and pitch-wheel position always agree.

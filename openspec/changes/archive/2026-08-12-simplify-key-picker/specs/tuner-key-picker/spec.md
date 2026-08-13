@@ -1,9 +1,4 @@
-## Purpose
-
-The key picker is the chip that lets a user set the tuner's reference key (just-intonation mode) or switch to equal temperament, by toggling key-select mode directly on the pitch wheel rather than opening a separate dropdown.
-It reuses the wheel's own `wedgeColor` hue/tier system so its color language agrees with the wheel rather than introducing a separate one.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Key/temperament chip reflects current state
 The tuner SHALL display a tappable button below the pitch wheel, showing a concise label for the current reference key or equal temperament.
@@ -55,3 +50,25 @@ The button SHALL expose an accessible name/role reflecting its current state, an
 #### Scenario: Button accessible name reflects current state
 - **WHEN** an assistive technology reads the button
 - **THEN** its accessible name includes the current reference key or "Equal Temperament", and indicates that activating it toggles key selection on the pitch wheel
+
+## REMOVED Requirements
+
+### Requirement: Dropdown displays a 4x3 grid of the 12 keys
+**Reason**: The dropdown grid duplicated the pitch wheel's own 12-note layout. Key selection now happens directly on the wheel's existing wedges.
+**Migration**: See `tuner-pitch-wheel`'s key-select-mode requirements for how wedges now serve as selection targets.
+
+### Requirement: Dropdown includes an Equal Temperament control
+**Reason**: Replaced by tapping the wheel's center face while key-select mode is active, removing the need for a separate button inside a popup.
+**Migration**: See `tuner-pitch-wheel`'s key-select-mode requirements for the center-face equal-temperament target.
+
+### Requirement: Accidental grid cells show a secondary enharmonic name
+**Reason**: The grid is removed. The pitch wheel's wedges already render this two-line primary/secondary labeling unconditionally, independent of any mode.
+**Migration**: No action needed; see `tuner-pitch-wheel`'s existing "Accidental wedges show a secondary enharmonic name" requirement.
+
+### Requirement: All 12 grid cells stay a consistent size
+**Reason**: The grid is removed; there are no grid cells to size-match.
+**Migration**: Not applicable.
+
+### Requirement: Accessible label includes both names for accidental cells
+**Reason**: The grid is removed. The pitch wheel's wedge accessible labels already convey both note names.
+**Migration**: No action needed; see `tuner-pitch-wheel`'s existing wedge accessibility requirements.
