@@ -26,7 +26,7 @@ jobs:
         run: bun install
 
       - name: Fetch tags snapshot
-        run: bun run fetch-tags
+        run: bun run fetch-tags || echo "::warning::Fetch failed, using checked-in snapshot"
 
       - name: Build
         run: bun run build
