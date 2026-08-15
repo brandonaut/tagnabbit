@@ -2,295 +2,35 @@ import { CircleGauge, Maximize2, Minimize2, Pencil } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { wedgeColor } from "./noteColors"
 import { ENHARMONIC, NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
-
-// How many cents each scale degree sits above its equal-tempered position in 5-limit JI.
-// Ratios: 1/1, 16/15, 9/8, 6/5, 5/4, 4/3, 45/32, 3/2, 8/5, 5/3, 9/5, 15/8
-// e.g. the major 3rd (5/4) is 386¢, which is 14¢ BELOW the ET major 3rd (400¢) → -13.7
-const JI_OFFSETS = [0, 11.7, 3.9, 15.6, -13.7, -2.0, -9.8, 2.0, 13.7, -15.6, 17.6, -11.7]
-
-// Each scale degree's JI target in cents above the tonic, plus the distance to the
-// neighbouring target in each direction. These gaps run from 70.7¢ to 133.2¢, which is
-// why the wheel can't map cents to degrees at one fixed rate — see centsToAngle.
-// Degree 11's neighbour above is the octave (1200¢), not degree 0.
-const JI_TARGETS = JI_OFFSETS.map((offset, degree) => degree * 100 + offset)
-const JI_GAP_UP = JI_TARGETS.map((target, degree) =>
-  degree === 11 ? 1200 - target : JI_TARGETS[degree + 1] - target,
-)
-// The gap below a degree is the gap above the degree beneath it.
-const JI_GAP_DOWN = JI_TARGETS.map((_, degree) => JI_GAP_UP[(degree + 11) % 12])
-
-// Detection range: the barbershop voice range.
-const MIN_HZ = 65
-const MAX_HZ = 1050
-const FFT_SIZE = 2048
-// Only fundamentals below MAX_HZ matter, so the signal is decimated before the coarse
-// correlation pass — 16x less work for an O(n²) search. The 8-tap boxcar prefilter has
-// a null at exactly the post-decimation Nyquist and stays below -13 dB above it.
-const DECIM = 4
-const BOXCAR = 8
-const DECIMATED_SIZE = Math.floor((FFT_SIZE - BOXCAR) / DECIM)
-// Coarse peaks resolve to DECIM full-rate samples, so the true peak is within ±DECIM/2
-// decimated samples; this window has ample margin.
-const REFINE_HALF_WIDTH = 16
-// Take the first NSDF peak within this fraction of the global maximum rather than the
-// global maximum itself. Once the function is properly normalized, every integer multiple
-// of the true period is a peak of comparable height, so a plain argmax lands on an
-// arbitrary subharmonic and reports a pitch one or two octaves low.
-const PEAK_RATIO = 0.9
-// NSDF clarity at the chosen peak: 1 is perfectly periodic. Breath and room noise fall far
-// below this.
-const CLARITY = 0.45
-const RMS_FLOOR = 0.001
-// Extra lags searched past each end of the range so peaks at the extremes still have
-// neighbours for the local-maximum test.
-const LAG_MARGIN = 2
-
-// 8-tap boxcar antialias filter applied as a running sum, keeping every DECIM-th output.
-// O(1) per output sample. The output is unscaled — only the argmax of the correlation
-// matters downstream, and the confidence test runs against the full-rate signal.
-function decimate(src: Float32Array, dst: Float32Array): void {
-  let sum = 0
-  for (let i = 0; i < BOXCAR; i++) sum += src[i]
-  dst[0] = sum
-  let base = 0
-  for (let out = 1; out < dst.length; out++) {
-    for (let k = 0; k < DECIM; k++) {
-      sum += src[base + BOXCAR] - src[base]
-      base++
-    }
-    dst[out] = sum
-  }
-}
-
-// power[k] = sum of squares of buf[0..k), so the NSDF denominator over any lag's overlap
-// window is one subtraction rather than a second inner loop.
-function buildPower(buf: Float32Array, size: number, power: Float32Array): void {
-  power[0] = 0
-  for (let i = 0; i < size; i++) power[i + 1] = power[i] + buf[i] * buf[i]
-}
-
-// Normalized square difference function (McLeod). Bounded to [-1, 1] and 1 at perfect
-// periodicity, so peak heights are comparable across lags and across input levels. A raw
-// correlation sum is neither: it attenuates long lags, which biases toward reporting a
-// pitch an octave high whenever the fundamental is weak relative to the 2nd harmonic —
-// the common case for low bass on a phone mic.
-function nsdf(
-  buf: Float32Array,
-  size: number,
-  lo: number,
-  hi: number,
-  power: Float32Array,
-  out: Float32Array,
-): void {
-  for (let lag = lo; lag <= hi; lag++) {
-    const n = size - lag
-    let r = 0
-    for (let j = 0; j < n; j++) r += buf[j] * buf[j + lag]
-    const m = power[n] + power[size] - power[lag]
-    out[lag - lo] = m > 0 ? (2 * r) / m : 0
-  }
-}
-
-// The first peak within PEAK_RATIO of the tallest one, as an index into `out`. Taking the
-// tallest peak outright is wrong: multiples of the true period score just as high once the
-// function is normalized, so an argmax picks a subharmonic more or less at random.
-function firstStrongPeak(out: Float32Array, count: number): number {
-  let tallest = 0
-  for (let i = 0; i < count; i++) if (out[i] > tallest) tallest = out[i]
-  if (tallest <= 0) return -1
-  const threshold = tallest * PEAK_RATIO
-  for (let i = 1; i < count - 1; i++) {
-    if (out[i] > out[i - 1] && out[i] >= out[i + 1] && out[i] >= threshold) return i
-  }
-  return -1
-}
-
-// Recompute at full sample rate in a narrow window around the coarse peak, then
-// parabolic-interpolate. Interpolating on the decimated peak alone is far too coarse: a
-// 1050 Hz fundamental is only ~11 decimated samples per period, which carries ~15¢ of
-// systematic bias. The window holds a single peak, so a plain argmax is right here.
-function refinePeak(
-  buf: Float32Array,
-  size: number,
-  center: number,
-  minLag: number,
-  maxLag: number,
-  power: Float32Array,
-  scratch: Float32Array,
-): { lag: number; clarity: number } {
-  const lo = Math.max(minLag, center - REFINE_HALF_WIDTH)
-  const hi = Math.min(maxLag, center + REFINE_HALF_WIDTH)
-  nsdf(buf, size, lo, hi, power, scratch)
-  let best = Number.NEGATIVE_INFINITY
-  let at = lo
-  for (let lag = lo; lag <= hi; lag++) {
-    if (scratch[lag - lo] > best) {
-      best = scratch[lag - lo]
-      at = lag
-    }
-  }
-  if (at <= lo || at >= hi) return { lag: at, clarity: best }
-  const left = scratch[at - lo - 1]
-  const mid = scratch[at - lo]
-  const right = scratch[at - lo + 1]
-  const denom = 2 * (2 * mid - left - right)
-  return { lag: denom === 0 ? at : at + (right - left) / denom, clarity: best }
-}
-
-interface DetectBuffers {
-  decimated: Float32Array
-  power: Float32Array
-  coarsePower: Float32Array
-  coarse: Float32Array
-  scratch: Float32Array
-}
-
-function detectPitch(buf: Float32Array, b: DetectBuffers, sampleRate: number): number {
-  const size = buf.length
-  buildPower(buf, size, b.power)
-  if (b.power[size] / size < RMS_FLOOR) return -1 // reject breath and room noise
-
-  decimate(buf, b.decimated)
-  const coarseSize = b.decimated.length
-  const coarseRate = sampleRate / DECIM
-  // LAG_MARGIN past each end of the range: a peak sitting on the very first or last lag
-  // has no neighbour to be compared against, so the local-maximum test cannot see it and
-  // the pitch at that edge of the range gets missed entirely.
-  const coarseLo = Math.max(2, Math.floor(coarseRate / MAX_HZ) - LAG_MARGIN)
-  const coarseHi = Math.min(coarseSize - 2, Math.ceil(coarseRate / MIN_HZ) + LAG_MARGIN)
-  buildPower(b.decimated, coarseSize, b.coarsePower)
-  nsdf(b.decimated, coarseSize, coarseLo, coarseHi, b.coarsePower, b.coarse)
-  const peak = firstStrongPeak(b.coarse, coarseHi - coarseLo + 1)
-  if (peak < 0) return -1
-
-  const { lag, clarity } = refinePeak(
-    buf,
-    size,
-    (coarseLo + peak) * DECIM,
-    Math.max(2, Math.floor(sampleRate / MAX_HZ) - LAG_MARGIN * DECIM),
-    Math.min(size - 2, Math.ceil(sampleRate / MIN_HZ) + LAG_MARGIN * DECIM),
-    b.power,
-    b.scratch,
-  )
-  if (lag <= 0 || clarity < CLARITY) return -1
-  return sampleRate / lag
-}
-
-// Cents above A440. The smoothing pipeline works in this domain rather than in linear Hz
-// so that a given interval settles at the same rate in every register.
-function freqToCents(freq: number): number {
-  return 1200 * Math.log2(freq / 440)
-}
-
-// A tuning target the arc can be flush with: one of the 12 notes in ET, or one of the 12
-// JI targets for the current key. The gaps are the distances to the neighbouring targets,
-// which set both the wedge's angular scale and where its edges fall.
-interface Target {
-  semitone: number // semitones above A440, so it carries the octave
-  targetCents: number // the target's own position, in cents above A440
-  gapUp: number
-  gapDown: number
-}
-
-function etTarget(cents: number): Target {
-  const semitone = Math.round(cents / 100)
-  return { semitone, targetCents: semitone * 100, gapUp: 100, gapDown: 100 }
-}
-
-function jiTarget(cents: number, keyIdx: number): Target {
-  const tonic = (keyIdx - 9) * 100 // C is 9 semitones below A440
-  const octave = Math.floor((cents - tonic) / 1200)
-  const within = cents - tonic - octave * 1200
-  let degree = 0
-  let oct = octave
-  let bestDist = Number.POSITIVE_INFINITY
-  for (let d = 0; d < 12; d++) {
-    const dist = Math.abs(within - JI_TARGETS[d])
-    if (dist < bestDist) {
-      bestDist = dist
-      degree = d
-    }
-  }
-  // The tonic an octave up is nearer than any degree in this one.
-  if (Math.abs(within - 1200) < bestDist) {
-    degree = 0
-    oct = octave + 1
-  }
-  const targetCents = tonic + oct * 1200 + JI_TARGETS[degree]
-  return {
-    semitone: Math.round(targetCents / 100),
-    targetCents,
-    gapUp: JI_GAP_UP[degree],
-    gapDown: JI_GAP_DOWN[degree],
-  }
-}
-
-function nearestTarget(cents: number, temperament: "ji" | "et", keyIdx: number): Target {
-  return temperament === "ji" && keyIdx >= 0 ? jiTarget(cents, keyIdx) : etTarget(cents)
-}
-
-function semitoneToNote(semitone: number): { note: string; octave: number } {
-  // A4 = semitone 0 = index 9 = octave 4
-  const noteIdx = ((semitone % 12) + 12 + 9) % 12
-  return { note: NOTE_NAMES[noteIdx], octave: Math.floor((semitone + 57) / 12) }
-}
-
-// Piecewise linear between tuning targets. Every wedge is 30° wide, but the pitch span it
-// represents is the gap to its neighbour, so the arc reaches the wedge edge exactly at the
-// midpoint between two targets however far apart they are. Mapping at a fixed 0.3°/cent
-// instead — as this did before — tears the wheel by up to 8.8° where JI intervals are
-// narrower than a semitone, and freezes the arc across 33¢ where they are wider. In ET
-// every gap is 100¢ and this reduces to the old fixed rate.
-function centsToAngle(deviation: number, target: Target): number {
-  const gap = deviation >= 0 ? target.gapUp : target.gapDown
-  return Math.max(-15, Math.min(15, (30 * deviation) / gap))
-}
-
-function median3(a: number, b: number, c: number): number {
-  return Math.max(Math.min(a, b), Math.min(Math.max(a, b), c))
-}
-
-// Wheel SVG geometry
-const CX = 80
-const CY = 80
-const OUTER_R = 73
-const INNER_R = 42
-const LABEL_R = 58
-// The accuracy arc sits just inside the wedge ring, leaving a 1-unit seam at INNER_R to
-// read alignment against. Dividers reach past it so every wedge edge continues across the
-// band — without that the arc has nothing to be judged against.
-const ARC_OUTER_R = 41
-const ARC_INNER_R = 33
-const DIVIDER_INNER_R = 32
-
-function toXY(angleDeg: number, r: number): { x: number; y: number } {
-  const rad = ((angleDeg - 90) * Math.PI) / 180
-  return { x: CX + r * Math.cos(rad), y: CY + r * Math.sin(rad) }
-}
-
-// Inverse of toXY's angle mapping: which of the 12 wedges a point falls under,
-// independent of its distance from center.
-function angleToNoteIdx(x: number, y: number): number {
-  const deg = (Math.atan2(y - CY, x - CX) * 180) / Math.PI + 90
-  const idx = Math.round(deg / 30)
-  return ((idx % 12) + 12) % 12
-}
-
-// A 30°-wide ring segment centred on an arbitrary angle. Wedges are pinned to multiples
-// of 30°; the accuracy arc is the same shape free to sit anywhere.
-function ringSegment(centerDeg: number, innerR: number, outerR: number): string {
-  const start = centerDeg - 15
-  const end = centerDeg + 15
-  const o1 = toXY(start, outerR)
-  const o2 = toXY(end, outerR)
-  const i2 = toXY(end, innerR)
-  const i1 = toXY(start, innerR)
-  return `M ${o1.x} ${o1.y} A ${outerR} ${outerR} 0 0 1 ${o2.x} ${o2.y} L ${i2.x} ${i2.y} A ${innerR} ${innerR} 0 0 0 ${i1.x} ${i1.y} Z`
-}
-
-function segmentArc(noteIdx: number): string {
-  return ringSegment(noteIdx * 30, INNER_R, OUTER_R)
-}
+import {
+  ARC_INNER_R,
+  ARC_OUTER_R,
+  angleToNoteIdx,
+  CX,
+  CY,
+  DIVIDER_INNER_R,
+  INNER_R,
+  LABEL_R,
+  OUTER_R,
+  ringSegment,
+  segmentArc,
+  toXY,
+} from "./tuner/geometry"
+import {
+  DECIMATED_SIZE,
+  type DetectBuffers,
+  detectPitch,
+  FFT_SIZE,
+  REFINE_HALF_WIDTH,
+} from "./tuner/pitchDetection"
+import {
+  centsToAngle,
+  freqToCents,
+  median3,
+  nearestTarget,
+  semitoneToNote,
+  type Target,
+} from "./tuner/tuning"
 
 interface WheelProps {
   detectedNoteIdx: number | null

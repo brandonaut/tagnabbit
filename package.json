@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "biome check .",
     "preview": "vite preview",
+    "test": "vitest run",
     "fetch-tags": "bun run scripts/fetch-tags.ts",
     "release": "bash scripts/release.sh"
   },
@@ -32,6 +33,7 @@
     "typescript": "~5.9.3",
     "vite": "^7.1.9",
     "vite-plugin-pwa": "^1.1.0",
+    "vitest": "^4.1.10",
     "workbox-core": "^7.3.0",
     "workbox-window": "^7.4.0"
   },

@@ -64,6 +64,14 @@ bun run build
 
 Output goes to `dist/`. Runs TypeScript compilation then Vite build.
 
+## Test
+
+```sh
+bun run test
+```
+
+Runs the vitest unit test suite once (no watch mode).
+
 ## Preview production build
 
 ```sh
