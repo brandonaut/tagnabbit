@@ -4,19 +4,21 @@ import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
 import { formatKey } from "./formatKey"
 import PdfViewer from "./PdfViewer"
+import { resolveTag } from "./resolveTag"
 import Tuner from "./Tuner"
 import { useWakeLock } from "./useWakeLock"
 
 interface Props {
-  tag: Tag
-  onBack: () => void
+  id: string
   favorites: Record<string, Tag>
   onToggleFavorite: (tag: Tag) => void
 }
 
-export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Props) {
-  const favorited = !!favorites[tag.id]
-  const sheetUrl = tag.sheetMusicUrl || tag.sheetMusicAltUrl
+export default function TagPage({ id, favorites, onToggleFavorite }: Props) {
+  const [tag, setTag] = useState<Tag | null>(null)
+  const [tagState, setTagState] = useState<"loading" | "found" | "not-found">("loading")
+  const favorited = tag ? !!favorites[tag.id] : false
+  const sheetUrl = tag ? tag.sheetMusicUrl || tag.sheetMusicAltUrl : ""
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [mimeType, setMimeType] = useState<string>("")
   const [loading, setLoading] = useState(false)
@@ -24,6 +26,26 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
   const [infoOpen, setInfoOpen] = useState(false)
   const [uiVisible, setUiVisible] = useState(true)
   const [contentReady, setContentReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setTagState("loading")
+    setTag(null)
+
+    resolveTag(id).then((resolved) => {
+      if (cancelled) return
+      if (resolved) {
+        setTag(resolved)
+        setTagState("found")
+      } else {
+        setTagState("not-found")
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   useEffect(() => {
     if (!sheetUrl) return
@@ -72,6 +94,33 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
   const showSpinner = !!sheetUrl && (loading || (!!objectUrl && !contentReady))
 
   useWakeLock(contentReady)
+
+  if (tagState === "loading") {
+    return (
+      <div className="min-h-dvh flex items-center justify-center">
+        <Loader2
+          className="animate-spin text-[var(--text-muted)]"
+          size={32}
+          aria-label="Loading tag"
+        />
+      </div>
+    )
+  }
+
+  if (!tag) {
+    return (
+      <div className="pt-4 px-4 flex flex-col gap-3">
+        <button
+          type="button"
+          className="shrink-0 flex items-center gap-1 text-[0.9rem]"
+          onClick={() => history.back()}
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
+        <p className="text-[var(--text-muted)]">Tag not found.</p>
+      </div>
+    )
+  }
 
   return (
     <div className="relative pb-20">
@@ -178,7 +227,7 @@ export default function TagPage({ tag, onBack, favorites, onToggleFavorite }: Pr
             <button
               type="button"
               className="shrink-0 flex items-center gap-1 text-[0.9rem]"
-              onClick={onBack}
+              onClick={() => history.back()}
             >
               <ArrowLeft size={16} />
             </button>

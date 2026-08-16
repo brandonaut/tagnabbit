@@ -75,6 +75,13 @@ export async function searchTags(query: string): Promise<SearchResult> {
   return parseTagsXml(await response.text())
 }
 
+// Reuses the text-search endpoint since the API has no confirmed id-only
+// parameter, filtering the results down to an exact id match.
+export async function fetchTagById(id: string): Promise<Tag | null> {
+  const result = await searchTags(id)
+  return result.tags.find((tag) => tag.id === id) ?? null
+}
+
 const PAGE_SIZE = 500
 
 export async function getTagCount(): Promise<number> {

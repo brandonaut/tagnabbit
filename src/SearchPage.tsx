@@ -1,6 +1,7 @@
 import Fuse, { type FuseResult, type IFuseOptions } from "fuse.js"
 import { Dices, Menu, Search } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useLocation, useSearchParams } from "wouter"
 import { fetchAllTags, getTagCount, type SearchResult, type Tag } from "./api/tags"
 import {
   getCachedAllTags,
@@ -9,6 +10,7 @@ import {
   type TagCacheMeta,
   touchTagCache,
 } from "./cache/tagDatabase"
+import NavTabs from "./NavTabs"
 import SettingsDrawer from "./SettingsDrawer"
 import { type FieldMatches, type MatchRanges, TagListItem } from "./TagListItem"
 import Tuner from "./Tuner"
@@ -39,16 +41,14 @@ const FUSE_OPTIONS: Omit<IFuseOptions<Tag>, "keys"> = {
 }
 
 interface Props {
-  initialQuery: string
-  initialResult: SearchResult | null
   favorites: Record<string, Tag>
-  onSelectTag: (tag: Tag, query: string, result: SearchResult | null) => void
 }
 
-export default function SearchPage({ initialQuery, initialResult, favorites, onSelectTag }: Props) {
-  const [activeTab, setActiveTab] = useState<"search" | "favorites">("search")
-  const [query, setQuery] = useState(initialQuery)
-  const [result, setResult] = useState<SearchResult | null>(initialResult)
+export default function SearchPage({ favorites }: Props) {
+  const [, navigate] = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "")
+  const [result, setResult] = useState<SearchResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [localTags, setLocalTags] = useState<Tag[] | null>(null)
@@ -60,10 +60,14 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
   } | null>(null)
   const [isSeeding, setIsSeeding] = useState(false)
   const [isBackgroundRefreshing, setIsBackgroundRefreshing] = useState(false)
-  const [debouncedQuery, setDebouncedQuery] = useState(initialQuery)
+  const [debouncedQuery, setDebouncedQuery] = useState(query)
   const [localMatches, setLocalMatches] = useState<Map<string, FieldMatches>>(new Map())
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [filters, setFilters] = useState({ type: "", parts: "", learningTracks: false })
+  const [filters, setFilters] = useState(() => ({
+    type: searchParams.get("type") ?? "",
+    parts: searchParams.get("parts") ?? "",
+    learningTracks: false,
+  }))
 
   const typeOptions = useMemo(
     () => (localTags ? [...new Set(localTags.map((t) => t.type).filter(Boolean))].sort() : []),
@@ -81,7 +85,7 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
   const fuseRef = useRef<Fuse<Tag>[] | null>(null)
   // True when showing Surprise Me results (no query). Used to prevent the
   // fuzzy search effect from clearing the result on remount.
-  const isSurpriseRef = useRef(!initialQuery && !!initialResult)
+  const isSurpriseRef = useRef(false)
   // Load local tag database on mount, then check staleness in background
   useEffect(() => {
     let cancelled = false
@@ -159,6 +163,16 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
     const id = setTimeout(() => setDebouncedQuery(query), 150)
     return () => clearTimeout(id)
   }, [query])
+
+  // Reflect the debounced query and filters in the URL so search state is
+  // shareable/refresh-safe. `replace: true` avoids a history entry per keystroke.
+  useEffect(() => {
+    const next = new URLSearchParams()
+    if (debouncedQuery) next.set("q", debouncedQuery)
+    if (filters.type) next.set("type", filters.type)
+    if (filters.parts) next.set("parts", filters.parts)
+    setSearchParams(next, { replace: true })
+  }, [debouncedQuery, filters.type, filters.parts, setSearchParams])
 
   // Build Fuse index when local tags are loaded
   useEffect(() => {
@@ -309,35 +323,11 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
     setLocalMatches(new Map())
   }
 
-  const favoriteTags = Object.values(favorites)
-
   return (
     <div className="max-w-2xl mx-auto py-4 px-4 flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <h1 className="m-0 text-2xl font-bold shrink-0">Tagnabbit</h1>
-        <div className="relative flex bg-[var(--text-muted)]/25 rounded-full p-0.5 text-sm">
-          <div
-            className="absolute top-0.5 bottom-0.5 rounded-full transition-all duration-200 bg-[var(--accent)]"
-            style={{
-              left: activeTab === "search" ? "2px" : "50%",
-              right: activeTab === "favorites" ? "2px" : "50%",
-            }}
-          />
-          <button
-            type="button"
-            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "search" ? "bg-[var(--accent)]/25 text-[var(--bg-surface)]" : "bg-[var(--bg)] text-[var(--text-muted)]"}`}
-            onClick={() => setActiveTab("search")}
-          >
-            Search
-          </button>
-          <button
-            type="button"
-            className={`relative z-10 px-3 py-0.5 w-1/2 rounded-full transition-colors duration-150 font-medium ${activeTab === "favorites" ? "bg-[var(--accent)]/25 text-[var(--bg-surface)]" : "bg-[var(--bg)] text-[var(--text-muted)]"}`}
-            onClick={() => setActiveTab("favorites")}
-          >
-            Favorites
-          </button>
-        </div>
+        <NavTabs />
       </div>
       <button
         type="button"
@@ -348,83 +338,61 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
         <Menu size={22} color="var(--text-muted)" />
       </button>
 
-      {activeTab === "favorites" &&
-        (favoriteTags.length === 0 ? (
-          <p className="text-[var(--text-muted)] text-sm">
-            No favorites yet. Open a tag and tap the heart to save it here.
-          </p>
-        ) : (
-          <ul className="list-none p-0 m-0 flex flex-col gap-2">
-            {favoriteTags.map((tag) => (
-              <TagListItem
-                key={tag.id}
-                tag={tag}
-                onClick={() => onSelectTag(tag, "", null)}
-                isFavorited
-              />
+      <form className="flex gap-2">
+        <div className="relative flex-1">
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search barbershop tags..."
+            className="w-full py-2 pl-9 pr-3 text-base border border-[var(--border)] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[var(--accent)] focus:border-transparent"
+            disabled={isDownloading}
+          />
+        </div>
+      </form>
+
+      {isSeeding && <p className="text-sm text-[var(--text-muted)] m-0">Loading tag database…</p>}
+
+      {isDownloading && downloadProgress && (
+        <p className="text-sm text-[var(--text-muted)] m-0">
+          Downloading… {downloadProgress.fetched.toLocaleString()}
+          {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
+          {" tags"}
+        </p>
+      )}
+
+      {localTags !== null && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <select
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
+            value={filters.type}
+            onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            {typeOptions.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
-          </ul>
-        ))}
-
-      {activeTab === "search" && (
-        <>
-          <form className="flex gap-2">
-            <div className="relative flex-1">
-              <Search
-                size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] pointer-events-none"
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search barbershop tags..."
-                className="w-full py-2 pl-9 pr-3 text-base border border-[var(--border)] rounded-md bg-inherit text-inherit focus:outline-2 focus:outline-[var(--accent)] focus:border-transparent"
-                disabled={isDownloading}
-              />
-            </div>
-          </form>
-
-          {isSeeding && (
-            <p className="text-sm text-[var(--text-muted)] m-0">Loading tag database…</p>
-          )}
-
-          {isDownloading && downloadProgress && (
-            <p className="text-sm text-[var(--text-muted)] m-0">
-              Downloading… {downloadProgress.fetched.toLocaleString()}
-              {downloadProgress.total > 0 && ` / ${downloadProgress.total.toLocaleString()}`}
-              {" tags"}
-            </p>
-          )}
-
-          {localTags !== null && (
-            <div className="flex flex-wrap gap-2 items-center">
-              <select
-                className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
-                value={filters.type}
-                onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
-              >
-                <option value="">All types</option>
-                {typeOptions.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
-                value={filters.parts}
-                onChange={(e) => setFilters((f) => ({ ...f, parts: e.target.value }))}
-              >
-                <option value="">All parts</option>
-                {partsOptions.map((p) => (
-                  <option key={p} value={p}>
-                    {p} parts
-                  </option>
-                ))}
-              </select>
-              {/* Hide the learning track filter until we can actually play the learning tracks! */}
-              {/* <label className="hidden flex items-center gap-[0.375rem] text-sm cursor-pointer text-[#aaa]">
+          </select>
+          <select
+            className="font-sans text-sm py-[0.3rem] px-2 border border-[var(--border)] rounded-md bg-[var(--bg-surface)] text-[var(--text)] cursor-pointer"
+            value={filters.parts}
+            onChange={(e) => setFilters((f) => ({ ...f, parts: e.target.value }))}
+          >
+            <option value="">All parts</option>
+            {partsOptions.map((p) => (
+              <option key={p} value={p}>
+                {p} parts
+              </option>
+            ))}
+          </select>
+          {/* Hide the learning track filter until we can actually play the learning tracks! */}
+          {/* <label className="hidden flex items-center gap-[0.375rem] text-sm cursor-pointer text-[#aaa]">
             <input
               type="checkbox"
               checked={filters.learningTracks}
@@ -432,47 +400,45 @@ export default function SearchPage({ initialQuery, initialResult, favorites, onS
             />
             Learning tracks
           </label> */}
-              <button
-                type="button"
-                className="ml-auto flex items-center gap-1 text-sm"
-                onClick={handleSurpriseMe}
-              >
-                <Dices size={16} />
-                Surprise Me!
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            className="ml-auto flex items-center gap-1 text-sm"
+            onClick={handleSurpriseMe}
+          >
+            <Dices size={16} />
+            Surprise Me!
+          </button>
+        </div>
+      )}
 
-          {error && (
-            <p className="text-[#f87171] m-0" role="alert">
-              {error}
-            </p>
-          )}
+      {error && (
+        <p className="text-[#f87171] m-0" role="alert">
+          {error}
+        </p>
+      )}
 
-          {result && result.tags.length > 0 && (
-            <>
-              <p className="text-sm text-[var(--text-muted)] m-0">
-                {`${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`}
-              </p>
-              <ul className="list-none p-0 m-0 flex flex-col gap-2">
-                {result.tags.map((tag) => (
-                  <TagListItem
-                    key={tag.id}
-                    tag={tag}
-                    onClick={() => onSelectTag(tag, query, result)}
-                    fieldMatches={localMatches.get(tag.id)}
-                    query={query}
-                    isFavorited={!!favorites[tag.id]}
-                  />
-                ))}
-              </ul>
-            </>
-          )}
-
-          {result && result.tags.length === 0 && query.trim() && (
-            <p className="text-[var(--text-muted)] text-sm">No tags found for "{query.trim()}".</p>
-          )}
+      {result && result.tags.length > 0 && (
+        <>
+          <p className="text-sm text-[var(--text-muted)] m-0">
+            {`${result.available.toLocaleString()} matches${result.available > result.count ? `, showing ${result.count}` : ""}`}
+          </p>
+          <ul className="list-none p-0 m-0 flex flex-col gap-2">
+            {result.tags.map((tag) => (
+              <TagListItem
+                key={tag.id}
+                tag={tag}
+                onClick={() => navigate(`/tag/${tag.id}`)}
+                fieldMatches={localMatches.get(tag.id)}
+                query={query}
+                isFavorited={!!favorites[tag.id]}
+              />
+            ))}
+          </ul>
         </>
+      )}
+
+      {result && result.tags.length === 0 && query.trim() && (
+        <p className="text-[var(--text-muted)] text-sm">No tags found for "{query.trim()}".</p>
       )}
 
       <SettingsDrawer

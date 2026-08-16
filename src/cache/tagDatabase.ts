@@ -45,6 +45,27 @@ export async function getCachedAllTags(): Promise<Tag[] | null> {
   return (await dbGet<Tag[]>(db, "tags")) ?? null
 }
 
+export async function getCachedTagById(id: string): Promise<Tag | null> {
+  const tags = await getCachedAllTags()
+  return tags?.find((tag) => tag.id === id) ?? null
+}
+
+// Tags fetched individually via a deep link, kept separate from the
+// full-catalog "tags" key so a single ad-hoc tag never looks like a
+// downloaded catalog to SearchPage's bootstrap/staleness logic.
+export async function getAdhocTag(id: string): Promise<Tag | null> {
+  const db = await openDB()
+  const adhocTags = await dbGet<Record<string, Tag>>(db, "adhocTags")
+  return adhocTags?.[id] ?? null
+}
+
+export async function storeAdhocTag(tag: Tag): Promise<void> {
+  const db = await openDB()
+  const adhocTags = (await dbGet<Record<string, Tag>>(db, "adhocTags")) ?? {}
+  adhocTags[tag.id] = tag
+  await dbPutAll(db, [["adhocTags", adhocTags]])
+}
+
 export async function storeAllTags(tags: Tag[], cachedAt?: string): Promise<void> {
   const db = await openDB()
   const meta: TagCacheMeta = { count: tags.length, cachedAt: cachedAt ?? new Date().toISOString() }

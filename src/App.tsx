@@ -1,25 +1,15 @@
-import { useEffect, useState } from "react"
-import type { SearchResult, Tag } from "./api/tags.ts"
+import { useState } from "react"
+import { Redirect, Route, Router, Switch } from "wouter"
+import type { Tag } from "./api/tags.ts"
 import { getFavorites, toggleFavorite } from "./cache/favorites.ts"
+import FavoritesPage from "./FavoritesPage.tsx"
+import { useHashLocation } from "./hashLocation.ts"
 import PWABadge from "./PWABadge.tsx"
 import SearchPage from "./SearchPage.tsx"
 import TagPage from "./TagPage.tsx"
 
-interface SearchState {
-  query: string
-  result: SearchResult | null
-}
-
 export default function App() {
-  const [searchState, setSearchState] = useState<SearchState>({ query: "", result: null })
-  const [selectedTag, setSelectedTag] = useState<Tag | null>(null)
   const [favorites, setFavorites] = useState<Record<string, Tag>>(getFavorites)
-
-  useEffect(() => {
-    const handlePopState = () => setSelectedTag(null)
-    window.addEventListener("popstate", handlePopState)
-    return () => window.removeEventListener("popstate", handlePopState)
-  }, [])
 
   function handleToggleFavorite(tag: Tag) {
     toggleFavorite(tag)
@@ -27,27 +17,24 @@ export default function App() {
   }
 
   return (
-    <>
-      {selectedTag ? (
-        <TagPage
-          tag={selectedTag}
-          onBack={() => history.back()}
-          favorites={favorites}
-          onToggleFavorite={handleToggleFavorite}
-        />
-      ) : (
-        <SearchPage
-          initialQuery={searchState.query}
-          initialResult={searchState.result}
-          favorites={favorites}
-          onSelectTag={(tag, query, result) => {
-            setSearchState({ query, result })
-            setSelectedTag(tag)
-            history.pushState({}, "")
-          }}
-        />
-      )}
+    <Router hook={useHashLocation}>
+      <Switch>
+        <Route path="/tag/:id">
+          {(params) => (
+            <TagPage id={params.id} favorites={favorites} onToggleFavorite={handleToggleFavorite} />
+          )}
+        </Route>
+        <Route path="/favorites">
+          <FavoritesPage favorites={favorites} />
+        </Route>
+        <Route path="/search">
+          <SearchPage favorites={favorites} />
+        </Route>
+        <Route>
+          <Redirect to="/search" />
+        </Route>
+      </Switch>
       <PWABadge />
-    </>
+    </Router>
   )
 }
