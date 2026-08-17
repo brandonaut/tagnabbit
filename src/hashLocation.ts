@@ -34,13 +34,16 @@ function currentSearch(): string {
   return search ? `?${search}` : ""
 }
 
-function navigate(to: string, { replace = false }: { replace?: boolean } = {}) {
+function navigate(
+  to: string,
+  { replace = false, state = null }: { replace?: boolean; state?: unknown } = {},
+) {
   const url = new URL(location.href)
   url.hash = to.startsWith("/") ? to : `/${to}`
   if (replace) {
-    history.replaceState(history.state, "", url)
+    history.replaceState(state, "", url)
   } else {
-    history.pushState(null, "", url)
+    history.pushState(state, "", url)
   }
   dispatchEvent(new HashChangeEvent("hashchange"))
 }

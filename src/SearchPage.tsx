@@ -40,6 +40,26 @@ const FUSE_OPTIONS: Omit<IFuseOptions<Tag>, "keys"> = {
   ignoreLocation: true,
 }
 
+// Snapshot of the current result, stashed on the /search history entry so
+// it survives visiting a tag and coming back — the only way to recover
+// Surprise Me's random sample, which isn't derivable from the URL.
+interface SearchSnapshot {
+  q: string
+  type: string
+  parts: string
+  tagIds: string[]
+  available: number
+}
+
+function isSearchSnapshot(value: unknown): value is SearchSnapshot {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    typeof (value as SearchSnapshot).q === "string" &&
+    Array.isArray((value as SearchSnapshot).tagIds)
+  )
+}
+
 interface Props {
   favorites: Record<string, Tag>
 }
@@ -86,6 +106,22 @@ export default function SearchPage({ favorites }: Props) {
   // True when showing Surprise Me results (no query). Used to prevent the
   // fuzzy search effect from clearing the result on remount.
   const isSurpriseRef = useRef(false)
+  // A history-state snapshot left by a prior mount, pending re-application
+  // once localTags loads. Only used if it matches the current URL exactly.
+  const pendingSnapshotRef = useRef<SearchSnapshot | null>(
+    (() => {
+      const snapshot = isSearchSnapshot(history.state) ? history.state : null
+      if (
+        snapshot &&
+        snapshot.q === (searchParams.get("q") ?? "") &&
+        snapshot.type === (searchParams.get("type") ?? "") &&
+        snapshot.parts === (searchParams.get("parts") ?? "")
+      ) {
+        return snapshot
+      }
+      return null
+    })(),
+  )
   // Load local tag database on mount, then check staleness in background
   useEffect(() => {
     let cancelled = false
@@ -165,14 +201,27 @@ export default function SearchPage({ favorites }: Props) {
   }, [query])
 
   // Reflect the debounced query and filters in the URL so search state is
-  // shareable/refresh-safe. `replace: true` avoids a history entry per keystroke.
+  // shareable/refresh-safe (`replace: true` avoids a history entry per
+  // keystroke), and snapshot the current result as history state in the same
+  // call so a later back-navigation can restore it exactly — this has to be
+  // one combined replace, not two separate ones, since a second replaceState
+  // call would silently wipe out whatever state the first one just set.
   useEffect(() => {
     const next = new URLSearchParams()
     if (debouncedQuery) next.set("q", debouncedQuery)
     if (filters.type) next.set("type", filters.type)
     if (filters.parts) next.set("parts", filters.parts)
-    setSearchParams(next, { replace: true })
-  }, [debouncedQuery, filters.type, filters.parts, setSearchParams])
+    const snapshot: SearchSnapshot | undefined = result
+      ? {
+          q: debouncedQuery.trim(),
+          type: filters.type,
+          parts: filters.parts,
+          tagIds: result.tags.map((t) => t.id),
+          available: result.available,
+        }
+      : undefined
+    setSearchParams(next, { replace: true, state: snapshot })
+  }, [debouncedQuery, filters.type, filters.parts, result, setSearchParams])
 
   // Build Fuse index when local tags are loaded
   useEffect(() => {
@@ -283,6 +332,26 @@ export default function SearchPage({ favorites }: Props) {
     })
     setLocalMatches(newMatches)
   }, [debouncedQuery, filters, localTags])
+
+  // Apply a pending history-state snapshot (from a prior mount) once
+  // localTags is available. For a typed query this just avoids an initial
+  // blank flash — the Fuse-search effect above still recomputes and
+  // overwrites it deterministically. For Surprise Me (empty q) there's no
+  // recompute to correct it, so this is the only source of the exact sample;
+  // isSurpriseRef is set here so the empty-query branch above doesn't clear it.
+  useEffect(() => {
+    if (!localTags) return
+    const snapshot = pendingSnapshotRef.current
+    if (!snapshot) return
+    pendingSnapshotRef.current = null
+
+    const byId = new Map(localTags.map((t) => [t.id, t]))
+    const tags = snapshot.tagIds.map((id) => byId.get(id)).filter((t): t is Tag => !!t)
+    if (tags.length === 0) return
+
+    isSurpriseRef.current = !snapshot.q
+    setResult({ available: snapshot.available, count: tags.length, tags })
+  }, [localTags])
 
   async function handleDownloadAll() {
     setIsDownloading(true)
