@@ -118,3 +118,16 @@
     padding: 0 1px;
   }
 }
+
+/* Scrolls text in a continuous loop when it's wider than its container — see
+   src/PlayerPage.tsx's file name display. The container holds two back-to-back
+   copies of the text; sliding by exactly one copy's width (-50%) loops
+   seamlessly since the second copy lands where the first one started. */
+@keyframes marquee-loop {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

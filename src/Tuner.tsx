@@ -383,6 +383,10 @@ interface Props {
   variant?: "floating" | "inline"
   visible?: boolean
   collapsible?: boolean
+  // How far the floating variant sits from the bottom of the viewport — override
+  // when another fixed-position element (e.g. a bottom tab bar) would otherwise
+  // overlap it. Ignored for the inline variant.
+  floatingBottom?: string
 }
 
 export default function Tuner({
@@ -392,6 +396,7 @@ export default function Tuner({
   variant = "floating",
   visible = true,
   collapsible = false,
+  floatingBottom = "0.75rem",
 }: Props) {
   const [active, setActive] = useState(false)
   const [pitch, setPitch] = useState<PitchInfo | null>(null)
@@ -689,9 +694,10 @@ export default function Tuner({
     <div
       className={
         isFloating
-          ? `fixed bottom-3 right-3 opacity-90 z-50 flex flex-col items-end gap-1 transition-transform duration-300 ${visible ? "translate-y-0" : "translate-y-24"}`
+          ? `fixed right-3 opacity-90 z-50 flex flex-col items-end gap-1 transition-transform duration-300 ${visible ? "translate-y-0" : "translate-y-24"}`
           : "flex flex-col items-center gap-1"
       }
+      style={isFloating ? { bottom: floatingBottom } : undefined}
       onClick={isFloating ? (e) => e.stopPropagation() : undefined}
     >
       {(!collapsible || active) && (
@@ -701,7 +707,7 @@ export default function Tuner({
             background: "var(--bg-surface)",
             border: "1px solid var(--border)",
             transform: size === "large" ? "scale(1.4)" : "scale(1)",
-            transformOrigin: "bottom right",
+            transformOrigin: isFloating ? "bottom right" : "top center",
             transition: "transform 0.2s ease-out",
           }}
         >

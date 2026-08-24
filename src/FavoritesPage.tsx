@@ -1,6 +1,5 @@
 import { useLocation } from "wouter"
 import type { Tag } from "./api/tags"
-import NavTabs from "./NavTabs"
 import { TagListItem } from "./TagListItem"
 
 interface Props {
@@ -13,10 +12,7 @@ export default function FavoritesPage({ favorites }: Props) {
 
   return (
     <div className="max-w-2xl mx-auto py-4 px-4 flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <h1 className="m-0 text-2xl font-bold shrink-0">Tagnabbit</h1>
-        <NavTabs />
-      </div>
+      <h1 className="m-0 text-2xl font-bold shrink-0">Tagnabbit</h1>
 
       {favoriteTags.length === 0 ? (
         <p className="text-[var(--text-muted)] text-sm">

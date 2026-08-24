@@ -10,10 +10,8 @@ import {
   type TagCacheMeta,
   touchTagCache,
 } from "./cache/tagDatabase"
-import NavTabs from "./NavTabs"
 import SettingsDrawer from "./SettingsDrawer"
 import { type FieldMatches, type MatchRanges, TagListItem } from "./TagListItem"
-import Tuner from "./Tuner"
 
 const FUSE_LIMIT = 100
 const ID_PREFIX_LIMIT = 20
@@ -394,10 +392,7 @@ export default function SearchPage({ favorites }: Props) {
 
   return (
     <div className="max-w-2xl mx-auto py-4 px-4 flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <h1 className="m-0 text-2xl font-bold shrink-0">Tagnabbit</h1>
-        <NavTabs />
-      </div>
+      <h1 className="m-0 text-2xl font-bold shrink-0">Tagnabbit</h1>
       <button
         type="button"
         className="fixed top-3 right-3 z-50 py-1 px-2 bg-transparent border-transparent leading-none"
@@ -519,7 +514,6 @@ export default function SearchPage({ favorites }: Props) {
         isBackgroundRefreshing={isBackgroundRefreshing}
         onRefreshCache={handleDownloadAll}
       />
-      <Tuner defaultKey="C" defaultTemperament="et" defaultSize="large" collapsible />
     </div>
   )
 }
