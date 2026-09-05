@@ -20,6 +20,14 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`
 }
 
+function formatBalance(value: number): string {
+  if (value === 0) return "Center"
+  const percent = Math.round(Math.abs(value) * 100)
+  return `${percent}% ${value < 0 ? "L" : "R"}`
+}
+
+const DOUBLE_TAP_MS = 300
+
 export default function PlayerPage() {
   const [fileName, setFileName] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -44,6 +52,7 @@ export default function PlayerPage() {
   const balanceRef = useRef(balance)
   const monoRef = useRef(mono)
   const speedRef = useRef(speed)
+  const lastBalanceTapRef = useRef(0)
 
   useWakeLock(isPlaying)
 
@@ -305,6 +314,18 @@ export default function PlayerPage() {
     persistDebounced({ balance: value })
   }
 
+  // Range inputs have no native double-tap event, so touch double-taps are
+  // detected manually; onDoubleClick below covers mouse/trackpad for free.
+  function handleBalanceTouchEnd() {
+    const now = Date.now()
+    if (now - lastBalanceTapRef.current < DOUBLE_TAP_MS) {
+      handleBalanceChange(0)
+      lastBalanceTapRef.current = 0
+    } else {
+      lastBalanceTapRef.current = now
+    }
+  }
+
   function handleMonoChange(value: boolean) {
     setMono(value)
     persistDebounced({ mono: value })
@@ -431,10 +452,7 @@ export default function PlayerPage() {
               </button>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label htmlFor="balance-slider" className="text-xs text-[var(--text-muted)]">
-                Balance
-              </label>
+            <div className="flex items-center gap-3">
               <input
                 id="balance-slider"
                 type="range"
@@ -443,22 +461,23 @@ export default function PlayerPage() {
                 step={0.01}
                 value={balance}
                 onChange={(e) => handleBalanceChange(Number(e.target.value))}
-                className="w-full"
+                onDoubleClick={() => handleBalanceChange(0)}
+                onTouchEnd={handleBalanceTouchEnd}
+                aria-label="Balance"
+                className="flex-1 max-w-[10rem]"
               />
-              <div className="flex justify-between text-[0.65rem] text-[var(--text-muted)]">
-                <span>L</span>
-                <span>R</span>
-              </div>
+              <span className="text-xs text-[var(--text-muted)] w-14 shrink-0">
+                {formatBalance(balance)}
+              </span>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={mono}
+                  onChange={(e) => handleMonoChange(e.target.checked)}
+                />
+                Mono
+              </label>
             </div>
-
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={mono}
-                onChange={(e) => handleMonoChange(e.target.checked)}
-              />
-              Mono
-            </label>
 
             <label className="flex items-center gap-2 text-sm">
               Speed
