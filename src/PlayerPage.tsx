@@ -11,6 +11,7 @@ const TUNER_FLOATING_BOTTOM = "calc(3.75rem + env(safe-area-inset-bottom) + 0.75
 const MARQUEE_PX_PER_SEC = 40
 const MARQUEE_MIN_SECONDS = 4
 const MARQUEE_MAX_SECONDS = 14
+const SPEED_OPTIONS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2]
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00"
@@ -27,6 +28,7 @@ export default function PlayerPage() {
   // -1 = full left, 0 = centered (original volume), 1 = full right.
   const [balance, setBalance] = useState(0)
   const [mono, setMono] = useState(false)
+  const [speed, setSpeed] = useState(1)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [marqueeDistance, setMarqueeDistance] = useState(0)
 
@@ -41,6 +43,7 @@ export default function PlayerPage() {
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const balanceRef = useRef(balance)
   const monoRef = useRef(mono)
+  const speedRef = useRef(speed)
 
   useWakeLock(isPlaying)
 
@@ -50,6 +53,9 @@ export default function PlayerPage() {
   useEffect(() => {
     monoRef.current = mono
   }, [mono])
+  useEffect(() => {
+    speedRef.current = speed
+  }, [speed])
 
   // Measure whether the file name overflows its box, so it only scrolls when
   // it actually needs to — recheck on file change and on viewport resize.
@@ -118,6 +124,15 @@ export default function PlayerPage() {
     gainR.gain.value = value < 0 ? 1 + value : 1
   }, [])
 
+  // playbackRate lives on the <audio> element itself, upstream of the Web
+  // Audio graph above, so it needs no gain/routing node of its own.
+  const applySpeed = useCallback((value: number) => {
+    const audio = audioRef.current
+    if (!audio) return
+    audio.playbackRate = value
+    audio.preservesPitch = true
+  }, [])
+
   useEffect(() => {
     applyRouting(mono)
   }, [mono, applyRouting])
@@ -126,8 +141,12 @@ export default function PlayerPage() {
     applyBalance(balance)
   }, [balance, applyBalance])
 
+  useEffect(() => {
+    applySpeed(speed)
+  }, [speed, applySpeed])
+
   const loadFile = useCallback(
-    (file: File, restore?: { position: number; balance: number; mono: boolean }) => {
+    (file: File, restore?: { position: number; balance: number; mono: boolean; speed: number }) => {
       const audio = audioRef.current
       if (!audio) return
 
@@ -143,6 +162,7 @@ export default function PlayerPage() {
       // or they're left disconnected from the merger and no sound plays.
       applyRouting(restore?.mono ?? false)
       applyBalance(restore?.balance ?? 0)
+      applySpeed(restore?.speed ?? 1)
 
       audio.pause()
       audio.src = url
@@ -154,6 +174,7 @@ export default function PlayerPage() {
       setDuration(0)
       setBalance(restore?.balance ?? 0)
       setMono(restore?.mono ?? false)
+      setSpeed(restore?.speed ?? 1)
 
       if (restore) {
         const onLoadedMetadata = () => {
@@ -163,7 +184,7 @@ export default function PlayerPage() {
         audio.addEventListener("loadedmetadata", onLoadedMetadata)
       }
     },
-    [ensureAudioGraph, applyRouting, applyBalance],
+    [ensureAudioGraph, applyRouting, applyBalance, applySpeed],
   )
 
   function handleFileSelected(file: File) {
@@ -175,6 +196,7 @@ export default function PlayerPage() {
       position: 0,
       balance: 0,
       mono: false,
+      speed: 1,
     })
   }
 
@@ -185,7 +207,12 @@ export default function PlayerPage() {
       const record = await getStoredPlayerFile()
       if (cancelled || !record) return
       const file = new File([record.blob], record.name, { type: record.type })
-      loadFile(file, { position: record.position, balance: record.balance, mono: record.mono })
+      loadFile(file, {
+        position: record.position,
+        balance: record.balance,
+        mono: record.mono,
+        speed: record.speed ?? 1,
+      })
     })()
     return () => {
       cancelled = true
@@ -193,7 +220,7 @@ export default function PlayerPage() {
   }, [loadFile])
 
   function persistDebounced(
-    overrides: Partial<{ position: number; balance: number; mono: boolean }>,
+    overrides: Partial<{ position: number; balance: number; mono: boolean; speed: number }>,
   ) {
     if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
     persistTimerRef.current = setTimeout(() => {
@@ -201,6 +228,7 @@ export default function PlayerPage() {
         position: overrides.position ?? audioRef.current?.currentTime ?? 0,
         balance: overrides.balance ?? balanceRef.current,
         mono: overrides.mono ?? monoRef.current,
+        speed: overrides.speed ?? speedRef.current,
       })
     }, PERSIST_DEBOUNCE_MS)
   }
@@ -213,6 +241,7 @@ export default function PlayerPage() {
       position: audioRef.current?.currentTime ?? 0,
       balance: balanceRef.current,
       mono: monoRef.current,
+      speed: speedRef.current,
     })
   }, [])
 
@@ -279,6 +308,11 @@ export default function PlayerPage() {
   function handleMonoChange(value: boolean) {
     setMono(value)
     persistDebounced({ mono: value })
+  }
+
+  function handleSpeedChange(value: number) {
+    setSpeed(value)
+    persistDebounced({ speed: value })
   }
 
   return (
@@ -424,6 +458,21 @@ export default function PlayerPage() {
                 onChange={(e) => handleMonoChange(e.target.checked)}
               />
               Mono
+            </label>
+
+            <label className="flex items-center gap-2 text-sm">
+              Speed
+              <select
+                value={speed}
+                onChange={(e) => handleSpeedChange(Number(e.target.value))}
+                className="ml-1"
+              >
+                {SPEED_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}x
+                  </option>
+                ))}
+              </select>
             </label>
 
             <label

@@ -10,6 +10,7 @@ export interface PlayerFileRecord {
   position: number
   balance: number
   mono: boolean
+  speed: number
 }
 
 function openDB(): Promise<IDBDatabase> {
@@ -57,7 +58,7 @@ export async function storePlayerFile(record: PlayerFileRecord): Promise<void> {
 }
 
 export async function updatePlayerFileState(
-  partial: Pick<PlayerFileRecord, "position" | "balance" | "mono">,
+  partial: Pick<PlayerFileRecord, "position" | "balance" | "mono" | "speed">,
 ): Promise<void> {
   try {
     const db = await openDB()
