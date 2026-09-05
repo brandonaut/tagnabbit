@@ -33,13 +33,13 @@ There is no router. `App.tsx` holds two state values (`searchState` and `selecte
 
 ### Key files
 
-| File | Purpose |
-|---|---|
-| `src/api/tags.ts` | Fetch and parse XML from the barbershoptags.com API; defines the `Tag` and `SearchResult` types |
-| `src/cache/tagDatabase.ts` | IndexedDB wrapper — store and retrieve the full tag list + metadata |
-| `src/cache/sheetMusic.ts` | Cache API wrapper for sheet music files (LRU, max 15 entries, tracked in `localStorage`) |
-| `src/proxyUrl.ts` | In dev, rewrites `barbershoptags.com` URLs to `/bst-proxy` to avoid CORS; passthrough in production |
-| `src/formatKey.ts` | Strips the mode prefix from `WritKey` values like `"Major:G"` → `"G"` |
+| File                       | Purpose                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `src/api/tags.ts`          | Fetch and parse XML from the barbershoptags.com API; defines the `Tag` and `SearchResult` types     |
+| `src/cache/tagDatabase.ts` | IndexedDB wrapper — store and retrieve the full tag list + metadata                                 |
+| `src/cache/sheetMusic.ts`  | Cache API wrapper for sheet music files (LRU, max 15 entries, tracked in `localStorage`)            |
+| `src/proxyUrl.ts`          | In dev, rewrites `barbershoptags.com` URLs to `/bst-proxy` to avoid CORS; passthrough in production |
+| `src/formatKey.ts`         | Strips the mode prefix from `WritKey` values like `"Major:G"` → `"G"`                               |
 
 ### CORS proxy
 
@@ -52,3 +52,10 @@ The Vite dev server proxies `/bst-proxy/*` → `https://www.barbershoptags.com/*
 ### API response format
 
 The barbershoptags.com API returns XML. See `TODO.md` for a full example response. Relevant fields mapped to `Tag`: `id`, `Title`, `AltTitle`, `Version`, `WritKey` (→ `key`), `Parts`, `Type`, `Arranger`, `Downloaded`, `Rating`, `RatingCount`, `SheetMusic`, `SheetMusicAlt`.
+
+## Development
+
+Don't start the dev server automatically after making changes.
+The user will do that manually.
+
+Don't commit anything without user consent.
