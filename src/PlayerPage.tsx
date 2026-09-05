@@ -12,6 +12,72 @@ const MARQUEE_PX_PER_SEC = 40
 const MARQUEE_MIN_SECONDS = 4
 const MARQUEE_MAX_SECONDS = 14
 const SPEED_OPTIONS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2]
+const WAVEFORM_PX_PER_SEC = 40
+const WAVEFORM_HEIGHT = 56
+// Below this many pixels of pointer movement, a waveform press-and-release is a tap
+// (toggles play/pause) rather than a drag (scrubs position).
+const TAP_MAX_MOVEMENT_PX = 6
+
+interface WaveformPeaks {
+  min: Float32Array
+  max: Float32Array
+  bucketCount: number
+}
+
+async function computeFileWaveform(file: File): Promise<WaveformPeaks> {
+  const arrayBuffer = await file.arrayBuffer()
+  const ctx = new AudioContext()
+  try {
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
+    return bucketWaveformPeaks(audioBuffer, WAVEFORM_PX_PER_SEC)
+  } finally {
+    ctx.close()
+  }
+}
+
+// One [min, max] pair per pixel column, downmixed across channels — computed directly
+// from the decoded buffer without ever materializing a full-length mono copy of it.
+function bucketWaveformPeaks(buffer: AudioBuffer, pxPerSec: number): WaveformPeaks {
+  const { sampleRate, numberOfChannels, length } = buffer
+  const channels: Float32Array[] = []
+  for (let c = 0; c < numberOfChannels; c++) channels.push(buffer.getChannelData(c))
+
+  const samplesPerBucket = Math.max(1, Math.round(sampleRate / pxPerSec))
+  const bucketCount = Math.max(1, Math.ceil(length / samplesPerBucket))
+  const min = new Float32Array(bucketCount)
+  const max = new Float32Array(bucketCount)
+
+  let bucketIndex = 0
+  let bucketMin = Infinity
+  let bucketMax = -Infinity
+  let countInBucket = 0
+  for (let i = 0; i < length; i++) {
+    let sum = 0
+    for (let c = 0; c < numberOfChannels; c++) sum += channels[c][i]
+    const value = sum / numberOfChannels
+    if (value < bucketMin) bucketMin = value
+    if (value > bucketMax) bucketMax = value
+    countInBucket++
+    if (countInBucket >= samplesPerBucket) {
+      min[bucketIndex] = bucketMin
+      max[bucketIndex] = bucketMax
+      bucketIndex++
+      bucketMin = Infinity
+      bucketMax = -Infinity
+      countInBucket = 0
+    }
+  }
+  if (countInBucket > 0 && bucketIndex < bucketCount) {
+    min[bucketIndex] = bucketMin
+    max[bucketIndex] = bucketMax
+  }
+
+  return { min, max, bucketCount }
+}
+
+function clamp(value: number, lo: number, hi: number): number {
+  return Math.min(Math.max(value, lo), hi)
+}
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "0:00"
@@ -39,6 +105,8 @@ export default function PlayerPage() {
   const [speed, setSpeed] = useState(1)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [marqueeDistance, setMarqueeDistance] = useState(0)
+  const [waveformPeaks, setWaveformPeaks] = useState<WaveformPeaks | null>(null)
+  const [isAnalyzingWaveform, setIsAnalyzingWaveform] = useState(false)
 
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileNameBoxRef = useRef<HTMLDivElement>(null)
@@ -53,6 +121,19 @@ export default function PlayerPage() {
   const monoRef = useRef(mono)
   const speedRef = useRef(speed)
   const lastBalanceTapRef = useRef(0)
+
+  const waveformRequestIdRef = useRef(0)
+  const waveformCanvasRef = useRef<HTMLCanvasElement>(null)
+  const waveformPlayheadRef = useRef<HTMLDivElement>(null)
+  const waveformViewportRef = useRef<HTMLDivElement>(null)
+  const waveformViewportWidthRef = useRef(0)
+  const waveformBucketCountRef = useRef(0)
+  const waveformPanAnimRef = useRef<number>(0)
+  const waveformDraggingRef = useRef(false)
+  const waveformPointerIdRef = useRef<number | null>(null)
+  const waveformDragConfirmedRef = useRef(false)
+  const waveformDragStartXRef = useRef(0)
+  const waveformDragStartTimeRef = useRef(0)
 
   useWakeLock(isPlaying)
 
@@ -192,6 +273,25 @@ export default function PlayerPage() {
         }
         audio.addEventListener("loadedmetadata", onLoadedMetadata)
       }
+
+      // Decoding is a separate pass from the <audio>/MediaElementAudioSourceNode
+      // playback path above, kept off the critical path for playability — the file
+      // is already loading/playable by the time this kicks off.
+      const requestId = ++waveformRequestIdRef.current
+      waveformBucketCountRef.current = 0
+      setWaveformPeaks(null)
+      setIsAnalyzingWaveform(true)
+      computeFileWaveform(file)
+        .then((peaks) => {
+          if (waveformRequestIdRef.current === requestId) setWaveformPeaks(peaks)
+        })
+        .catch(() => {
+          // Unsupported format or decode failure — leave the waveform unset;
+          // the rest of the player keeps working normally.
+        })
+        .finally(() => {
+          if (waveformRequestIdRef.current === requestId) setIsAnalyzingWaveform(false)
+        })
     },
     [ensureAudioGraph, applyRouting, applyBalance, applySpeed],
   )
@@ -309,6 +409,125 @@ export default function PlayerPage() {
     persistDebounced({ position: value })
   }
 
+  // Draws the full-track waveform once, when peaks for the current file become ready.
+  // One canvas pixel column per peak bucket — panning afterward is a transform only.
+  useEffect(() => {
+    if (!waveformPeaks) return
+    const canvas = waveformCanvasRef.current
+    if (!canvas) return
+    waveformBucketCountRef.current = waveformPeaks.bucketCount
+    canvas.width = waveformPeaks.bucketCount
+    canvas.height = WAVEFORM_HEIGHT
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = getComputedStyle(canvas).color
+    const mid = WAVEFORM_HEIGHT / 2
+    for (let x = 0; x < waveformPeaks.bucketCount; x++) {
+      const yTop = mid + waveformPeaks.min[x] * mid
+      const yBottom = mid + waveformPeaks.max[x] * mid
+      ctx.fillRect(x, yTop, 1, Math.max(1, yBottom - yTop))
+    }
+  }, [waveformPeaks])
+
+  // Tracks the waveform viewport's width for the pan-offset math below, without
+  // triggering a re-render on resize. Re-attaches on `fileName` since the viewport
+  // only exists in the DOM once a file is loaded.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fileName drives a DOM (re)mount, not read directly in the effect body
+  useEffect(() => {
+    const el = waveformViewportRef.current
+    if (!el) return
+    waveformViewportWidthRef.current = el.clientWidth
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) waveformViewportWidthRef.current = entry.contentRect.width
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [fileName])
+
+  // Pans the canvas to keep `time` under the playhead, except near the very start or
+  // end of the track, where panning further would show blank space past the actual
+  // waveform — there the canvas offset clamps to its start/end position instead, and
+  // the playhead itself moves off-center (to the left edge at time 0, to the right
+  // edge at the track's end) to stay aligned with the real position underneath it.
+  const panWaveformTo = useCallback((time: number) => {
+    const canvas = waveformCanvasRef.current
+    const playhead = waveformPlayheadRef.current
+    if (!canvas || !playhead) return
+    const viewportWidth = waveformViewportWidthRef.current
+    const canvasWidth = waveformBucketCountRef.current
+
+    const offset =
+      canvasWidth <= viewportWidth
+        ? (viewportWidth - canvasWidth) / 2
+        : clamp(viewportWidth / 2 - time * WAVEFORM_PX_PER_SEC, viewportWidth - canvasWidth, 0)
+
+    canvas.style.transform = `translateX(${offset}px)`
+    playhead.style.left = `${clamp(offset + time * WAVEFORM_PX_PER_SEC, 0, viewportWidth)}px`
+  }, [])
+
+  // Pans the waveform every frame — timeupdate fires too sparsely (~4Hz) for smooth
+  // motion at this px/sec rate. Runs continuously whenever the waveform is mounted
+  // (paused included, where it's a cheap no-op); suspended only while an active drag
+  // is directly driving the transform itself.
+  useEffect(() => {
+    function pan() {
+      if (!waveformDraggingRef.current) {
+        const audio = audioRef.current
+        if (audio) panWaveformTo(audio.currentTime)
+      }
+      waveformPanAnimRef.current = requestAnimationFrame(pan)
+    }
+    waveformPanAnimRef.current = requestAnimationFrame(pan)
+    return () => {
+      if (waveformPanAnimRef.current) cancelAnimationFrame(waveformPanAnimRef.current)
+    }
+  }, [panWaveformTo])
+
+  // A press-and-release that never crosses TAP_MAX_MOVEMENT_PX is a tap (toggles
+  // play/pause via the same togglePlay() the main button uses); crossing it promotes
+  // the gesture to a drag (scrubs position only — silent while paused, exactly like
+  // the timeline slider, continuing to play at the new position if it already was).
+  // Nothing about playback is touched until pointerup resolves which gesture it was.
+  function handleWaveformPointerDown(e: React.PointerEvent) {
+    const audio = audioRef.current
+    if (!audio) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    waveformPointerIdRef.current = e.pointerId
+    waveformDragStartXRef.current = e.clientX
+    waveformDragStartTimeRef.current = audio.currentTime
+    waveformDragConfirmedRef.current = false
+  }
+
+  function handleWaveformPointerMove(e: React.PointerEvent) {
+    if (waveformPointerIdRef.current !== e.pointerId) return
+    const audio = audioRef.current
+    if (!audio) return
+    const deltaX = e.clientX - waveformDragStartXRef.current
+
+    if (!waveformDragConfirmedRef.current) {
+      if (Math.abs(deltaX) < TAP_MAX_MOVEMENT_PX) return
+      waveformDragConfirmedRef.current = true
+      waveformDraggingRef.current = true
+    }
+
+    const max = duration || audio.duration || 0
+    const newTime = clamp(waveformDragStartTimeRef.current - deltaX / WAVEFORM_PX_PER_SEC, 0, max)
+    handleScrub(newTime)
+    panWaveformTo(newTime)
+  }
+
+  function handleWaveformPointerUp(e: React.PointerEvent) {
+    if (waveformPointerIdRef.current !== e.pointerId) return
+    waveformPointerIdRef.current = null
+    const wasDrag = waveformDragConfirmedRef.current
+    waveformDraggingRef.current = false
+    waveformDragConfirmedRef.current = false
+
+    if (!wasDrag) togglePlay()
+  }
+
   function handleBalanceChange(value: number) {
     setBalance(value)
     persistDebounced({ balance: value })
@@ -394,6 +613,34 @@ export default function PlayerPage() {
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: pointer-only tap/drag surface, no native role fits; aria-label still documents it for screen readers */}
+            <div
+              ref={waveformViewportRef}
+              className="relative h-14 overflow-hidden rounded-md touch-none select-none"
+              style={{ backgroundColor: "var(--bg-surface)" }}
+              onPointerDown={handleWaveformPointerDown}
+              onPointerMove={handleWaveformPointerMove}
+              onPointerUp={handleWaveformPointerUp}
+              onPointerCancel={handleWaveformPointerUp}
+              aria-label="Waveform — tap to play or pause, drag to scrub"
+            >
+              {isAnalyzingWaveform && (
+                <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--text-muted)]">
+                  Analyzing waveform…
+                </div>
+              )}
+              <canvas
+                ref={waveformCanvasRef}
+                className="absolute top-0 left-0 h-14"
+                style={{ color: "var(--text-muted)" }}
+              />
+              <div
+                ref={waveformPlayheadRef}
+                className="pointer-events-none absolute inset-y-0 w-px bg-[var(--accent)]"
+                style={{ left: "50%" }}
+              />
             </div>
 
             <div className="flex flex-col gap-1">
