@@ -94,8 +94,8 @@
     font-size: 1em;
     font-weight: 500;
     font-family: inherit;
-    background-color: var(--accent);
-    color: #10141e;
+    background-color: transparent;
+    color: inherit;
     cursor: pointer;
     transition:
       border-color 0.25s,

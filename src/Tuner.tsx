@@ -765,6 +765,7 @@ export default function Tuner({
       <button
         type="button"
         className={`py-[0.45em] px-[0.65em] select-none${active ? " bg-[#646cff] border-[#646cff] text-white" : ""}`}
+        style={active ? undefined : { backgroundColor: "var(--accent)", color: "#10141e" }}
         onClick={toggle}
         aria-label={active ? "Stop tuner" : "Start tuner"}
         title={active ? "Stop tuner" : "Tune"}

@@ -113,6 +113,7 @@ export default function TagPage({ id, favorites, onToggleFavorite }: Props) {
         <button
           type="button"
           className="shrink-0 flex items-center gap-1 text-[0.9rem]"
+          style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
           onClick={() => history.back()}
         >
           <ArrowLeft size={16} /> Back
@@ -227,6 +228,7 @@ export default function TagPage({ id, favorites, onToggleFavorite }: Props) {
             <button
               type="button"
               className="shrink-0 flex items-center gap-1 text-[0.9rem]"
+              style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
               onClick={() => history.back()}
             >
               <ArrowLeft size={16} />

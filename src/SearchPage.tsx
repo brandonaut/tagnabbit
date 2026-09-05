@@ -467,6 +467,7 @@ export default function SearchPage({ favorites }: Props) {
           <button
             type="button"
             className="ml-auto flex items-center gap-1 text-sm"
+            style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
             onClick={handleSurpriseMe}
           >
             <Dices size={16} />

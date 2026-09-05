@@ -1,9 +1,11 @@
 import {
   FastForward,
   ListMusic,
+  Minus,
   Music,
   Pause,
   Play,
+  Plus,
   Rewind,
   SkipBack,
   SkipForward,
@@ -634,6 +636,21 @@ export default function PlayerPage() {
     setSpeed(value)
   }
 
+  // Steps to the adjacent preset in SPEED_OPTIONS — same shape as
+  // getAdjacentTrack (find current position in a fixed ordered list, step by
+  // one, clamp at the ends) rather than a fixed numeric increment, so the
+  // result is always a value the dropdown can already display.
+  function getAdjacentSpeed(offset: 1 | -1): number | null {
+    const index = SPEED_OPTIONS.indexOf(speed)
+    if (index === -1) return null
+    return SPEED_OPTIONS[index + offset] ?? null
+  }
+
+  function handleSpeedStep(offset: 1 | -1) {
+    const next = getAdjacentSpeed(offset)
+    if (next !== null) handleSpeedChange(next)
+  }
+
   function handleDragHandlePointerDown(e: React.PointerEvent, track: PlaylistTrack, index: number) {
     e.currentTarget.setPointerCapture(e.pointerId)
     dragTrackIdRef.current = track.id
@@ -708,6 +725,7 @@ export default function PlayerPage() {
           type="button"
           onClick={() => setIsPlaylistOpen(true)}
           className="flex items-center gap-1 text-sm"
+          style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
         >
           <ListMusic size={18} />
           Playlist{playlist.length > 0 ? ` (${playlist.length})` : ""}
@@ -877,20 +895,36 @@ export default function PlayerPage() {
               </label>
             </div>
 
-            <label className="flex items-center gap-2 text-sm">
-              Speed
-              <select
-                value={speed}
-                onChange={(e) => handleSpeedChange(Number(e.target.value))}
-                className="ml-1"
+            {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: no native role fits a mixed button/select control group; aria-label still documents it for screen readers */}
+            <div className="flex items-center gap-2 text-sm" aria-label="Playback speed">
+              <button
+                type="button"
+                className="bg-transparent border-0 p-0 disabled:opacity-40"
+                style={{ color: "var(--text-muted)" }}
+                onClick={() => handleSpeedStep(-1)}
+                disabled={getAdjacentSpeed(-1) === null}
+                aria-label="Decrease speed"
               >
+                <Minus size={16} />
+              </button>
+              <select value={speed} onChange={(e) => handleSpeedChange(Number(e.target.value))}>
                 {SPEED_OPTIONS.map((option) => (
                   <option key={option} value={option}>
                     {option}x
                   </option>
                 ))}
               </select>
-            </label>
+              <button
+                type="button"
+                className="bg-transparent border-0 p-0 disabled:opacity-40"
+                style={{ color: "var(--text-muted)" }}
+                onClick={() => handleSpeedStep(1)}
+                disabled={getAdjacentSpeed(1) === null}
+                aria-label="Increase speed"
+              >
+                <Plus size={16} />
+              </button>
+            </div>
           </div>
         )}
       </div>

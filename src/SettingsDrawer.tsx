@@ -84,6 +84,7 @@ export default function SettingsDrawer({
           )}
           <button
             type="button"
+            style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
             onClick={onRefreshCache}
             disabled={isDownloading || isBackgroundRefreshing}
           >

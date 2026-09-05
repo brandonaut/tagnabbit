@@ -44,6 +44,7 @@ function PWABadge() {
               <button
                 type="button"
                 className="border border-[var(--border)] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]"
+                style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
                 onClick={() => updateServiceWorker(true)}
               >
                 Reload
@@ -62,6 +63,7 @@ function PWABadge() {
             <button
               type="button"
               className="border border-[var(--border)] outline-none mr-[5px] rounded-sm py-[3px] px-[10px]"
+              style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
               onClick={() => close()}
             >
               Close
