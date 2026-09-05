@@ -1,11 +1,28 @@
-import { FastForward, Music, Pause, Play, Rewind, SkipBack, SkipForward } from "lucide-react"
+import {
+  FastForward,
+  ListMusic,
+  Music,
+  Pause,
+  Play,
+  Rewind,
+  SkipBack,
+  SkipForward,
+} from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { getStoredPlayerFile, storePlayerFile, updatePlayerFileState } from "./cache/playerFile"
+import {
+  addTracks,
+  getGlobalState,
+  getPlaylist,
+  type PlaylistTrack,
+  removeTrack,
+  reorderTracks,
+  setGlobalState,
+} from "./cache/playerFile"
+import PlaylistModal from "./PlaylistModal"
 import Tuner from "./Tuner"
 import { useWakeLock } from "./useWakeLock"
 
 const SKIP_SECONDS = 10
-const PERSIST_DEBOUNCE_MS = 500
 // Clears the bottom tab bar's own height (see Layout.tsx) plus its usual gap.
 const TUNER_FLOATING_BOTTOM = "calc(3.75rem + env(safe-area-inset-bottom) + 0.75rem)"
 const MARQUEE_PX_PER_SEC = 40
@@ -17,6 +34,12 @@ const WAVEFORM_HEIGHT = 56
 // Below this many pixels of pointer movement, a waveform press-and-release is a tap
 // (toggles play/pause) rather than a drag (scrubs position).
 const TAP_MAX_MOVEMENT_PX = 6
+// Beyond this many pixels of horizontal swipe on a playlist row, releasing removes it.
+const SWIPE_REMOVE_THRESHOLD_PX = 80
+const DEFAULT_ROW_HEIGHT_PX = 56
+// The previous-track control restarts the current track below this many elapsed
+// seconds; past it, the first press restarts the track instead of switching tracks.
+const PREV_TRACK_THRESHOLD_SECONDS = 3
 
 interface WaveformPeaks {
   min: Float32Array
@@ -24,8 +47,8 @@ interface WaveformPeaks {
   bucketCount: number
 }
 
-async function computeFileWaveform(file: File): Promise<WaveformPeaks> {
-  const arrayBuffer = await file.arrayBuffer()
+async function computeFileWaveform(blob: Blob): Promise<WaveformPeaks> {
+  const arrayBuffer = await blob.arrayBuffer()
   const ctx = new AudioContext()
   try {
     const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
@@ -95,7 +118,10 @@ function formatBalance(value: number): string {
 const DOUBLE_TAP_MS = 300
 
 export default function PlayerPage() {
-  const [fileName, setFileName] = useState<string | null>(null)
+  const [playlist, setPlaylist] = useState<PlaylistTrack[]>([])
+  const [activeTrackId, setActiveTrackId] = useState<string | null>(null)
+  const [isPlaylistOpen, setIsPlaylistOpen] = useState(true)
+  const [addTracksError, setAddTracksError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
   const [currentTime, setCurrentTime] = useState(0)
@@ -108,6 +134,8 @@ export default function PlayerPage() {
   const [waveformPeaks, setWaveformPeaks] = useState<WaveformPeaks | null>(null)
   const [isAnalyzingWaveform, setIsAnalyzingWaveform] = useState(false)
 
+  const activeTrack = playlist.find((t) => t.id === activeTrackId) ?? null
+
   const audioRef = useRef<HTMLAudioElement>(null)
   const fileNameBoxRef = useRef<HTMLDivElement>(null)
   const fileNameTextRef = useRef<HTMLSpanElement>(null)
@@ -116,10 +144,8 @@ export default function PlayerPage() {
   const gainLRef = useRef<GainNode | null>(null)
   const gainRRef = useRef<GainNode | null>(null)
   const mergerRef = useRef<ChannelMergerNode | null>(null)
-  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const balanceRef = useRef(balance)
+  const activeTrackIdRef = useRef<string | null>(null)
   const monoRef = useRef(mono)
-  const speedRef = useRef(speed)
   const lastBalanceTapRef = useRef(0)
 
   const waveformRequestIdRef = useRef(0)
@@ -135,21 +161,24 @@ export default function PlayerPage() {
   const waveformDragStartXRef = useRef(0)
   const waveformDragStartTimeRef = useRef(0)
 
+  const dragTrackIdRef = useRef<string | null>(null)
+  const dragStartYRef = useRef(0)
+  const dragOriginIndexRef = useRef(0)
+  const dragRowHeightRef = useRef(DEFAULT_ROW_HEIGHT_PX)
+
+  const swipePointerIdRef = useRef<number | null>(null)
+  const swipeTrackIdRef = useRef<string | null>(null)
+  const swipeStartXRef = useRef(0)
+
   useWakeLock(isPlaying)
 
   useEffect(() => {
-    balanceRef.current = balance
-  }, [balance])
-  useEffect(() => {
     monoRef.current = mono
   }, [mono])
-  useEffect(() => {
-    speedRef.current = speed
-  }, [speed])
 
-  // Measure whether the file name overflows its box, so it only scrolls when
-  // it actually needs to — recheck on file change and on viewport resize.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fileName drives a DOM remeasure, not read directly in the effect body
+  // Measure whether the track name overflows its box, so it only scrolls when
+  // it actually needs to — recheck on track change and on viewport resize.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeTrack drives a DOM remeasure, not read directly in the effect body
   useEffect(() => {
     function measure() {
       const box = fileNameBoxRef.current
@@ -166,9 +195,9 @@ export default function PlayerPage() {
     return () => {
       window.removeEventListener("resize", measure)
     }
-  }, [fileName])
+  }, [activeTrack?.name])
 
-  // Built once, the first time a file loads, and reused for every later file
+  // Built once, the first time a track loads, and reused for every later track
   // — MediaElementAudioSourceNode can only be created once per <audio> element.
   const ensureAudioGraph = useCallback(() => {
     const audio = audioRef.current
@@ -235,53 +264,54 @@ export default function PlayerPage() {
     applySpeed(speed)
   }, [speed, applySpeed])
 
-  const loadFile = useCallback(
-    (file: File, restore?: { position: number; balance: number; mono: boolean; speed: number }) => {
+  const loadTrack = useCallback(
+    (track: PlaylistTrack, opts: { autoplay: boolean }) => {
       const audio = audioRef.current
       if (!audio) return
 
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-      const url = URL.createObjectURL(file)
+      const url = URL.createObjectURL(track.blob)
       objectUrlRef.current = url
 
       ensureAudioGraph()
       audioCtxRef.current?.resume()
+      // Balance and speed are never persisted — every track always starts at
+      // centered balance and normal speed, same as position always starts at 0.
       // The mono/balance effects below only re-run when those *values* change,
-      // which they usually don't on load (defaults are 0/false) — so a
-      // freshly created graph's gain nodes need to be wired up here directly,
-      // or they're left disconnected from the merger and no sound plays.
-      applyRouting(restore?.mono ?? false)
-      applyBalance(restore?.balance ?? 0)
-      applySpeed(restore?.speed ?? 1)
+      // which they usually don't on load — so a freshly created graph's gain
+      // nodes need to be wired up here directly, or they're left disconnected
+      // from the merger and no sound plays.
+      applyRouting(monoRef.current)
+      applyBalance(0)
+      applySpeed(1)
 
       audio.pause()
       audio.src = url
       audio.load()
 
-      setFileName(file.name)
+      activeTrackIdRef.current = track.id
+      setActiveTrackId(track.id)
       setIsPlaying(false)
-      setCurrentTime(restore?.position ?? 0)
+      setCurrentTime(0)
       setDuration(0)
-      setBalance(restore?.balance ?? 0)
-      setMono(restore?.mono ?? false)
-      setSpeed(restore?.speed ?? 1)
+      setBalance(0)
+      setSpeed(1)
 
-      if (restore) {
-        const onLoadedMetadata = () => {
-          audio.currentTime = restore.position
-          audio.removeEventListener("loadedmetadata", onLoadedMetadata)
-        }
-        audio.addEventListener("loadedmetadata", onLoadedMetadata)
-      }
+      setGlobalState({ activeTrackId: track.id })
 
       // Decoding is a separate pass from the <audio>/MediaElementAudioSourceNode
-      // playback path above, kept off the critical path for playability — the file
-      // is already loading/playable by the time this kicks off.
+      // playback path above, kept off the critical path for playability — the
+      // track is already loading/playable by the time this kicks off.
       const requestId = ++waveformRequestIdRef.current
       waveformBucketCountRef.current = 0
       setWaveformPeaks(null)
       setIsAnalyzingWaveform(true)
-      computeFileWaveform(file)
+      // setWaveformPeaks(null) alone doesn't repaint the canvas — the draw effect
+      // only runs when peaks arrive, so without this the previous track's waveform
+      // would keep showing through behind the "Loading…" placeholder.
+      const canvas = waveformCanvasRef.current
+      canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height)
+      computeFileWaveform(track.blob)
         .then((peaks) => {
           if (waveformRequestIdRef.current === requestId) setWaveformPeaks(peaks)
         })
@@ -292,82 +322,108 @@ export default function PlayerPage() {
         .finally(() => {
           if (waveformRequestIdRef.current === requestId) setIsAnalyzingWaveform(false)
         })
+
+      if (opts.autoplay) {
+        audioCtxRef.current?.resume()
+        audio.play()
+      }
     },
     [ensureAudioGraph, applyRouting, applyBalance, applySpeed],
   )
 
-  function handleFileSelected(file: File) {
-    loadFile(file)
-    storePlayerFile({
-      blob: file,
-      name: file.name,
-      type: file.type,
-      position: 0,
-      balance: 0,
-      mono: false,
-      speed: 1,
-    })
+  async function handleFilesAdded(files: File[]) {
+    if (files.length === 0) return
+    const result = await addTracks(files)
+    if (result.added.length > 0) {
+      setPlaylist((prev) => [...prev, ...result.added].sort((a, b) => a.order - b.order))
+      // Invariant: whenever the playlist is non-empty, some track is active. If
+      // nothing was active before this add (an empty playlist), the first newly
+      // added track becomes active — loaded paused, since adding files isn't a
+      // tap on a specific track.
+      if (!activeTrackIdRef.current) {
+        loadTrack(result.added[0], { autoplay: false })
+      }
+    }
+    if (result.failed.some((f) => f.reason === "quota")) {
+      setAddTracksError("Not enough storage space to add every file — some tracks weren't added.")
+    } else if (result.failed.length > 0) {
+      setAddTracksError("Some files couldn't be added.")
+    }
   }
 
-  // Restore the previously loaded file, if any, on mount.
+  function handleSelectTrack(track: PlaylistTrack) {
+    loadTrack(track, { autoplay: true })
+    setIsPlaylistOpen(false)
+  }
+
+  async function removeTrackFromPlaylist(id: string) {
+    await removeTrack(id)
+    const remaining = playlist.filter((t) => t.id !== id)
+    setPlaylist(remaining)
+    if (activeTrackIdRef.current !== id) return
+
+    // Invariant: whenever the playlist is non-empty, some track is active — fall
+    // back to the new first track (paused, no gesture behind this) rather than
+    // leaving the player in its empty state while tracks still remain.
+    if (remaining.length > 0) {
+      loadTrack(remaining[0], { autoplay: false })
+      return
+    }
+    const audio = audioRef.current
+    audio?.pause()
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+      objectUrlRef.current = null
+    }
+    activeTrackIdRef.current = null
+    setActiveTrackId(null)
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
+    setWaveformPeaks(null)
+    setGlobalState({ activeTrackId: null })
+  }
+
+  // Restore the persisted playlist, global settings, and last-active track (if
+  // any) on mount. The active track loads paused, not autoplaying — there's no
+  // user gesture behind a bare page load, unlike an explicit tap in the playlist.
+  // Invariant: whenever the restored playlist is non-empty, some track ends up
+  // active — falling back to the first track if there's no persisted (or no
+  // longer valid) activeTrackId.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      const record = await getStoredPlayerFile()
-      if (cancelled || !record) return
-      const file = new File([record.blob], record.name, { type: record.type })
-      loadFile(file, {
-        position: record.position,
-        balance: record.balance,
-        mono: record.mono,
-        speed: record.speed ?? 1,
-      })
+      const [tracks, globalState] = await Promise.all([getPlaylist(), getGlobalState()])
+      if (cancelled) return
+      setPlaylist(tracks)
+      setMono(globalState.mono)
+      // Set directly rather than waiting for the mono-sync effect above (which
+      // runs after this commits) — loadTrack below needs the restored value now.
+      monoRef.current = globalState.mono
+      const restoredActive = tracks.find((t) => t.id === globalState.activeTrackId)
+      if (restoredActive) {
+        loadTrack(restoredActive, { autoplay: false })
+      } else if (tracks.length > 0) {
+        loadTrack(tracks[0], { autoplay: false })
+      }
     })()
     return () => {
       cancelled = true
     }
-  }, [loadFile])
-
-  function persistDebounced(
-    overrides: Partial<{ position: number; balance: number; mono: boolean; speed: number }>,
-  ) {
-    if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
-    persistTimerRef.current = setTimeout(() => {
-      updatePlayerFileState({
-        position: overrides.position ?? audioRef.current?.currentTime ?? 0,
-        balance: overrides.balance ?? balanceRef.current,
-        mono: overrides.mono ?? monoRef.current,
-        speed: overrides.speed ?? speedRef.current,
-      })
-    }, PERSIST_DEBOUNCE_MS)
-  }
-
-  // Flushes the current position/balance/mono immediately — used whenever
-  // continued drift between saves would be noticeable (pause, unmount).
-  const persistNow = useCallback(() => {
-    if (!objectUrlRef.current) return
-    updatePlayerFileState({
-      position: audioRef.current?.currentTime ?? 0,
-      balance: balanceRef.current,
-      mono: monoRef.current,
-      speed: speedRef.current,
-    })
-  }, [])
+  }, [loadTrack])
 
   useEffect(() => {
     return () => {
-      persistNow()
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current)
-      if (persistTimerRef.current) clearTimeout(persistTimerRef.current)
       audioCtxRef.current?.close()
     }
-  }, [persistNow])
+  }, [])
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setIsDraggingOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file) handleFileSelected(file)
+    const files = Array.from(e.dataTransfer.files)
+    if (files.length > 0) handleFilesAdded(files)
   }
 
   function togglePlay() {
@@ -388,17 +444,43 @@ export default function PlayerPage() {
     audio.currentTime = Math.min(Math.max(audio.currentTime + seconds, 0), max)
   }
 
-  function skipToStart() {
-    const audio = audioRef.current
-    if (!audio) return
-    audio.currentTime = 0
+  // Finds the track adjacent to the active one in playlist order — used by both
+  // the manual previous/next controls and the auto-advance-on-end handler below.
+  function getAdjacentTrack(offset: 1 | -1): PlaylistTrack | null {
+    if (!activeTrackId) return null
+    const index = playlist.findIndex((t) => t.id === activeTrackId)
+    if (index === -1) return null
+    return playlist[index + offset] ?? null
   }
 
-  function skipToEnd() {
+  function handleNextTrack() {
+    const next = getAdjacentTrack(1)
+    if (next) {
+      loadTrack(next, { autoplay: true })
+      return
+    }
+    // No next track — mirrors the previous-track control's fallback (jump to an
+    // edge of the current track) rather than doing nothing.
     const audio = audioRef.current
     if (!audio) return
-    const max = duration || audio.duration || 0
-    audio.currentTime = max
+    audio.currentTime = duration || audio.duration || 0
+  }
+
+  // Classic media-player "previous" behavior: restart the current track if
+  // meaningfully into it, otherwise fall back one track in the playlist.
+  function handlePreviousTrack() {
+    const audio = audioRef.current
+    const nearStart = !audio || audio.currentTime <= PREV_TRACK_THRESHOLD_SECONDS
+    if (!nearStart) {
+      handleScrub(0)
+      return
+    }
+    const prev = getAdjacentTrack(-1)
+    if (prev) {
+      loadTrack(prev, { autoplay: true })
+    } else {
+      handleScrub(0)
+    }
   }
 
   function handleScrub(value: number) {
@@ -406,10 +488,9 @@ export default function PlayerPage() {
     if (!audio) return
     audio.currentTime = value
     setCurrentTime(value)
-    persistDebounced({ position: value })
   }
 
-  // Draws the full-track waveform once, when peaks for the current file become ready.
+  // Draws the full-track waveform once, when peaks for the current track become ready.
   // One canvas pixel column per peak bucket — panning afterward is a transform only.
   useEffect(() => {
     if (!waveformPeaks) return
@@ -431,9 +512,9 @@ export default function PlayerPage() {
   }, [waveformPeaks])
 
   // Tracks the waveform viewport's width for the pan-offset math below, without
-  // triggering a re-render on resize. Re-attaches on `fileName` since the viewport
-  // only exists in the DOM once a file is loaded.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fileName drives a DOM (re)mount, not read directly in the effect body
+  // triggering a re-render on resize. Re-attaches on the active track since the
+  // viewport only exists in the DOM once a track is loaded.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeTrack drives a DOM (re)mount, not read directly in the effect body
   useEffect(() => {
     const el = waveformViewportRef.current
     if (!el) return
@@ -444,7 +525,7 @@ export default function PlayerPage() {
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [fileName])
+  }, [activeTrack])
 
   // Pans the canvas to keep `time` under the playhead, except near the very start or
   // end of the track, where panning further would show blank space past the actual
@@ -530,7 +611,6 @@ export default function PlayerPage() {
 
   function handleBalanceChange(value: number) {
     setBalance(value)
-    persistDebounced({ balance: value })
   }
 
   // Range inputs have no native double-tap event, so touch double-taps are
@@ -547,19 +627,94 @@ export default function PlayerPage() {
 
   function handleMonoChange(value: boolean) {
     setMono(value)
-    persistDebounced({ mono: value })
+    setGlobalState({ mono: value })
   }
 
   function handleSpeedChange(value: number) {
     setSpeed(value)
-    persistDebounced({ speed: value })
+  }
+
+  function handleDragHandlePointerDown(e: React.PointerEvent, track: PlaylistTrack, index: number) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragTrackIdRef.current = track.id
+    dragStartYRef.current = e.clientY
+    dragOriginIndexRef.current = index
+    const row = (e.currentTarget as HTMLElement).closest("[data-playlist-row]")
+    dragRowHeightRef.current = row?.getBoundingClientRect().height || DEFAULT_ROW_HEIGHT_PX
+  }
+
+  function handleDragHandlePointerMove(e: React.PointerEvent) {
+    const trackId = dragTrackIdRef.current
+    if (!trackId) return
+    const deltaY = e.clientY - dragStartYRef.current
+    const rowHeight = dragRowHeightRef.current || DEFAULT_ROW_HEIGHT_PX
+    const shift = Math.round(deltaY / rowHeight)
+    setPlaylist((prev) => {
+      const currentIndex = prev.findIndex((t) => t.id === trackId)
+      if (currentIndex === -1) return prev
+      const targetIndex = clamp(dragOriginIndexRef.current + shift, 0, prev.length - 1)
+      if (targetIndex === currentIndex) return prev
+      const next = [...prev]
+      const [moved] = next.splice(currentIndex, 1)
+      next.splice(targetIndex, 0, moved)
+      return next
+    })
+  }
+
+  function handleDragHandlePointerUp() {
+    if (!dragTrackIdRef.current) return
+    dragTrackIdRef.current = null
+    setPlaylist((prev) => {
+      reorderTracks(prev.map((t) => t.id))
+      return prev
+    })
+  }
+
+  function handleRowPointerDown(e: React.PointerEvent<HTMLDivElement>, track: PlaylistTrack) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    swipePointerIdRef.current = e.pointerId
+    swipeTrackIdRef.current = track.id
+    swipeStartXRef.current = e.clientX
+  }
+
+  function handleRowPointerMove(e: React.PointerEvent<HTMLDivElement>, track: PlaylistTrack) {
+    if (swipePointerIdRef.current !== e.pointerId || swipeTrackIdRef.current !== track.id) return
+    const deltaX = e.clientX - swipeStartXRef.current
+    e.currentTarget.style.transform = `translateX(${deltaX}px)`
+    // The reveal layer sits behind this row as its previous sibling — swiping
+    // left uncovers its right side first (and vice versa), so the trash icon
+    // is justified to whichever side the swipe is opening up from.
+    const reveal = e.currentTarget.previousElementSibling as HTMLElement | null
+    if (reveal) reveal.style.justifyContent = deltaX < 0 ? "flex-end" : "flex-start"
+  }
+
+  function handleRowPointerUp(e: React.PointerEvent<HTMLDivElement>, track: PlaylistTrack) {
+    if (swipePointerIdRef.current !== e.pointerId) return
+    const deltaX = e.clientX - swipeStartXRef.current
+    swipePointerIdRef.current = null
+    swipeTrackIdRef.current = null
+    if (Math.abs(deltaX) > SWIPE_REMOVE_THRESHOLD_PX) {
+      removeTrackFromPlaylist(track.id)
+    } else {
+      e.currentTarget.style.transform = ""
+    }
   }
 
   return (
     <div className="max-w-2xl mx-auto pt-4 px-4 pb-24 flex flex-col gap-4 relative">
-      <h1 className="m-0 text-2xl font-bold">Player</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="m-0 text-2xl font-bold">Player</h1>
+        <button
+          type="button"
+          onClick={() => setIsPlaylistOpen(true)}
+          className="flex items-center gap-1 text-sm"
+        >
+          <ListMusic size={18} />
+          Playlist{playlist.length > 0 ? ` (${playlist.length})` : ""}
+        </button>
+      </div>
 
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop zone; the file picker below covers keyboard/non-drag use */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop zone; the playlist modal's file picker covers keyboard/non-drag use */}
       <div
         onDragOver={(e) => {
           e.preventDefault()
@@ -568,23 +723,17 @@ export default function PlayerPage() {
         onDragLeave={() => setIsDraggingOver(false)}
         onDrop={handleDrop}
       >
-        {!fileName ? (
-          <label
-            className={`flex flex-col items-center justify-center gap-2 py-12 px-4 rounded-lg border-2 border-dashed cursor-pointer text-center ${isDraggingOver ? "border-[var(--accent)]" : "border-[var(--border)]"}`}
-            style={{ color: "var(--text-muted)" }}
+        {!activeTrack ? (
+          <div
+            className="flex flex-col items-center justify-center gap-2 py-12 px-4 rounded-lg border-2 border-dashed text-center"
+            style={{
+              borderColor: isDraggingOver ? "var(--accent)" : "var(--border)",
+              color: "var(--text-muted)",
+            }}
           >
             <Music size={32} />
-            <span>Choose an audio file, or drag one here</span>
-            <input
-              type="file"
-              accept="audio/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) handleFileSelected(file)
-              }}
-            />
-          </label>
+            <span>Playlist is empty</span>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             <div ref={fileNameBoxRef} className="overflow-hidden">
@@ -602,14 +751,14 @@ export default function PlayerPage() {
                   ref={fileNameTextRef}
                   className={`inline-block text-sm text-[var(--text-muted)] whitespace-nowrap ${marqueeDistance > 0 ? "pr-8" : ""}`}
                 >
-                  {fileName}
+                  {activeTrack.name}
                 </span>
                 {marqueeDistance > 0 && (
                   <span
                     aria-hidden="true"
                     className="inline-block text-sm text-[var(--text-muted)] whitespace-nowrap pr-8"
                   >
-                    {fileName}
+                    {activeTrack.name}
                   </span>
                 )}
               </div>
@@ -628,7 +777,7 @@ export default function PlayerPage() {
             >
               {isAnalyzingWaveform && (
                 <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--text-muted)]">
-                  Analyzing waveform…
+                  Loading…
                 </div>
               )}
               <canvas
@@ -638,7 +787,9 @@ export default function PlayerPage() {
               />
               <div
                 ref={waveformPlayheadRef}
-                className="pointer-events-none absolute inset-y-0 w-px bg-[var(--accent)]"
+                className={`pointer-events-none absolute inset-y-0 w-px bg-[var(--accent)] ${
+                  waveformPeaks ? "" : "hidden"
+                }`}
                 style={{ left: "50%" }}
               />
             </div>
@@ -661,7 +812,7 @@ export default function PlayerPage() {
             </div>
 
             <div className="flex items-center justify-center gap-3">
-              <button type="button" onClick={skipToStart} aria-label="Jump to start">
+              <button type="button" onClick={handlePreviousTrack} aria-label="Previous track">
                 <SkipBack size={18} />
               </button>
               <button
@@ -694,7 +845,7 @@ export default function PlayerPage() {
                   {SKIP_SECONDS}
                 </span>
               </button>
-              <button type="button" onClick={skipToEnd} aria-label="Jump to end">
+              <button type="button" onClick={handleNextTrack} aria-label="Next track">
                 <SkipForward size={18} />
               </button>
             </div>
@@ -740,22 +891,6 @@ export default function PlayerPage() {
                 ))}
               </select>
             </label>
-
-            <label
-              className="text-xs underline cursor-pointer w-fit"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Load a different file
-              <input
-                type="file"
-                accept="audio/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) handleFileSelected(file)
-                }}
-              />
-            </label>
           </div>
         )}
       </div>
@@ -764,12 +899,10 @@ export default function PlayerPage() {
       <audio
         ref={audioRef}
         onPlay={() => setIsPlaying(true)}
-        onPause={() => {
-          setIsPlaying(false)
-          persistNow()
-        }}
+        onPause={() => setIsPlaying(false)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onEnded={handleNextTrack}
       />
 
       <Tuner
@@ -778,6 +911,26 @@ export default function PlayerPage() {
         defaultSize="small"
         collapsible
         floatingBottom={TUNER_FLOATING_BOTTOM}
+      />
+
+      {/* Always mounted (not conditionally rendered) so open/close can animate —
+          visibility and interactivity are controlled by the isOpen prop instead. */}
+      <PlaylistModal
+        isOpen={isPlaylistOpen}
+        tracks={playlist}
+        activeTrackId={activeTrackId}
+        errorMessage={addTracksError}
+        onDismissError={() => setAddTracksError(null)}
+        onClose={() => setIsPlaylistOpen(false)}
+        onFilesAdded={handleFilesAdded}
+        onSelectTrack={handleSelectTrack}
+        onRemoveTrack={removeTrackFromPlaylist}
+        onDragHandlePointerDown={handleDragHandlePointerDown}
+        onDragHandlePointerMove={handleDragHandlePointerMove}
+        onDragHandlePointerUp={handleDragHandlePointerUp}
+        onRowPointerDown={handleRowPointerDown}
+        onRowPointerMove={handleRowPointerMove}
+        onRowPointerUp={handleRowPointerUp}
       />
     </div>
   )
