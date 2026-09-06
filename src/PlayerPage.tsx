@@ -1095,13 +1095,7 @@ export default function PlayerPage() {
         onEnded={handleTrackEnded}
       />
 
-      <Tuner
-        defaultKey="C"
-        defaultTemperament="et"
-        defaultSize="small"
-        collapsible
-        floatingBottom={TUNER_FLOATING_BOTTOM}
-      />
+      <Tuner defaultSize="small" collapsible floatingBottom={TUNER_FLOATING_BOTTOM} />
     </div>
   )
 }

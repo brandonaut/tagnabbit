@@ -3,9 +3,7 @@
 The barbershop tuner in `Tuner.tsx` listens to the microphone and reports the pitch being sung.
 This spec defines that signal path: how the microphone is captured, how the fundamental frequency is estimated, how raw estimates are smoothed into a stable display value, how a note name is selected from that value, and how silence is handled.
 It covers detection behavior only; the visual presentation of the result belongs to `tuner-pitch-wheel`.
-
 ## Requirements
-
 ### Requirement: Microphone capture bypasses speech processing
 
 The tuner SHALL request the microphone with automatic gain control, noise suppression, and echo cancellation explicitly disabled.
@@ -108,30 +106,6 @@ Smoothing across such a gap makes the display sweep through every pitch in betwe
 - **WHEN** a singer's pitch drifts by well under a semitone while holding a note
 - **THEN** the display smooths that drift rather than snapping to each reading
 
-### Requirement: Note selection is nearest-target within the active temperament
-
-The detected note SHALL be the one whose tuning target is nearest the smoothed pitch, evaluated against the targets of the temperament currently in effect.
-In equal-temperament mode those are the equal-tempered pitches, so boundaries fall at the equal-tempered midpoints.
-In just-intonation mode those are the just-intonation targets for the reference key, so boundaries fall at the midpoints between adjacent just targets.
-
-This makes note selection key-dependent in just-intonation mode, which is intentional: the same boundary also defines where the accuracy arc reaches its wedge edge, and the two must agree or the arc pins against an edge while the label still names the previous note.
-The shift is small — just-intonation midpoints sit between roughly 8¢ below and 6¢ above their equal-tempered counterparts — and is only reachable when the pitch is already close to half a semitone out of tune.
-
-#### Scenario: Boundaries follow just targets in just-intonation mode
-
-- **WHEN** the tuner is in just-intonation mode and a pitch falls between two adjacent just-intonation targets
-- **THEN** the note reported is the one whose just target is nearer, not the one whose equal-tempered pitch is nearer
-
-#### Scenario: Boundaries follow equal-tempered pitches in equal-temperament mode
-
-- **WHEN** the tuner is in equal-temperament mode
-- **THEN** note boundaries fall at the equal-tempered midpoints, independent of any previously selected reference key
-
-#### Scenario: Note boundary agrees with the arc's wedge edge
-
-- **WHEN** a pitch reaches the boundary between two notes in either mode
-- **THEN** the accuracy arc reaches its wedge edge at that same pitch, rather than pinning before or after the label changes
-
 ### Requirement: Displayed note name is stabilized by boundary hysteresis
 
 The displayed note name SHALL change only once the smoothed pitch passes slightly beyond the boundary defined above, providing hysteresis so a pitch sitting on the boundary does not flicker.
@@ -162,3 +136,25 @@ When the hold elapses, the smoothing state SHALL be reset, so a pitch sung after
 
 - **WHEN** a singer pauses long enough for the reading to clear, then sings a different note
 - **THEN** the new note is displayed directly, without the display gliding from the pre-silence pitch
+
+### Requirement: Note selection is nearest equal-tempered semitone
+
+The detected note SHALL be the one whose equal-tempered pitch is nearest the smoothed pitch.
+Note boundaries therefore fall at the equal-tempered midpoints between adjacent semitones, independent of any musical key.
+This same boundary defines where the accuracy arc reaches its wedge edge, so the label and the arc always agree.
+
+#### Scenario: Nearest equal-tempered semitone is reported
+
+- **WHEN** a pitch is detected
+- **THEN** the note reported is the one whose equal-tempered pitch is closest to the smoothed value
+
+#### Scenario: Boundaries fall at equal-tempered midpoints
+
+- **WHEN** a smoothed pitch sits exactly between two adjacent equal-tempered semitones
+- **THEN** it is at the boundary between those two notes, and moving slightly either way selects the nearer one
+
+#### Scenario: Note boundary agrees with the arc's wedge edge
+
+- **WHEN** a pitch reaches the boundary between two notes
+- **THEN** the accuracy arc reaches its wedge edge at that same pitch, rather than pinning before or after the label changes
+

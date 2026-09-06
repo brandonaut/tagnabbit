@@ -2,7 +2,6 @@ import { ArrowLeft, Heart, Info, Loader2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
-import { formatKey } from "./formatKey"
 import PdfViewer from "./PdfViewer"
 import { resolveTag } from "./resolveTag"
 import Tuner from "./Tuner"
@@ -330,12 +329,7 @@ export default function TagPage({ id, favorites, onToggleFavorite }: Props) {
               )}
             </div>
           </div>
-          <Tuner
-            defaultKey={tag.key ? formatKey(tag.key) : "C"}
-            defaultSize="small"
-            visible={uiVisible}
-            collapsible
-          />
+          <Tuner defaultSize="small" visible={uiVisible} collapsible />
         </>
       )}
     </div>

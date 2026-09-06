@@ -1,7 +1,7 @@
-import { CircleGauge, Maximize2, Minimize2, Pencil } from "lucide-react"
+import { CircleGauge, Maximize2, Minimize2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { wedgeColor } from "./noteColors"
-import { ENHARMONIC, NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
+import { NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
 import {
   ARC_INNER_R,
   ARC_OUTER_R,
@@ -25,9 +25,9 @@ import {
 } from "./tuner/pitchDetection"
 import {
   centsToAngle,
+  etTarget,
   freqToCents,
   median3,
-  nearestTarget,
   semitoneToNote,
   type Target,
 } from "./tuner/tuning"
@@ -39,14 +39,9 @@ interface WheelProps {
   color: string
   noteName: string | null
   octave: number | null
-  referenceNoteIdx: number
-  temperament: "ji" | "et"
-  pickingKey: boolean
   onPlayStart: (pointerId: number, noteIdx: number) => void
   onNoteChange: (pointerId: number, noteIdx: number) => void
   onPlayStop: (pointerId: number) => void
-  onSelectKey: (noteIdx: number) => void
-  onSelectET: () => void
 }
 
 function PitchWheel({
@@ -56,14 +51,9 @@ function PitchWheel({
   color,
   noteName,
   octave,
-  referenceNoteIdx,
-  temperament,
-  pickingKey,
   onPlayStart,
   onNoteChange,
   onPlayStop,
-  onSelectKey,
-  onSelectET,
 }: WheelProps) {
   const hasNote = detectedNoteIdx !== null
 
@@ -88,10 +78,6 @@ function PitchWheel({
   }
 
   function handlePointerDown(noteIdx: number, e: React.PointerEvent<SVGPathElement>) {
-    if (pickingKey) {
-      onSelectKey(noteIdx)
-      return
-    }
     if (gesturesRef.current.has(e.pointerId)) return
     e.currentTarget.setPointerCapture(e.pointerId)
     gesturesRef.current.set(e.pointerId, noteIdx)
@@ -153,19 +139,18 @@ function PitchWheel({
         <path d={ringSegment(0, ARC_INNER_R, ARC_OUTER_R)} fill={color} />
       </g>
 
-      {/* Note segments, dividers, labels, reference-key marker, and tap hit targets */}
+      {/* Note segments, dividers, labels, and tap hit targets */}
       {NOTE_NAMES.map((note, i) => {
         const isDetected = hasNote && i === detectedNoteIdx
         const isPlaying = activeNoteIdxs.has(i)
         const isActive = isDetected || isPlaying
-        const isReference = i === referenceNoteIdx && temperament === "ji"
         const { x: lx, y: ly } = toXY(i * 30, LABEL_R)
         const { x: dx1, y: dy1 } = toXY(i * 30 - 15, DIVIDER_INNER_R)
         const { x: dx2, y: dy2 } = toXY(i * 30 - 15, OUTER_R)
         const display = NOTE_DISPLAY[i]
         const textFill = isActive ? "var(--note-text-on-active)" : "var(--text)"
 
-        const wedgeTier = pickingKey ? "selectable" : isActive ? "active" : "idle"
+        const wedgeTier = isActive ? "active" : "idle"
 
         return (
           <g key={note}>
@@ -216,16 +201,6 @@ function PitchWheel({
                 {note}
               </text>
             )}
-            {isReference && (
-              <path
-                d={segmentArc(i)}
-                fill="none"
-                stroke={wedgeColor(i, "reference")}
-                strokeWidth={1.75}
-                strokeLinejoin="round"
-                style={{ pointerEvents: "none" }}
-              />
-            )}
             {/* Hit target on top so it always captures the gesture regardless of what's painted beneath it */}
             <path
               d={segmentArc(i)}
@@ -235,52 +210,14 @@ function PitchWheel({
               onPointerMove={handlePointerMove}
               onPointerUp={endGesture}
               onPointerCancel={endGesture}
-              aria-label={
-                pickingKey
-                  ? `Set ${note} as the reference key`
-                  : `Play ${note}, or drag across the ring to play other notes as you cross them`
-              }
+              aria-label={`Play ${note}, or drag across the ring to play other notes as you cross them`}
             />
           </g>
         )
       })}
 
-      {/* Center: Equal Temp. button while picking a key, blank while any note is playing,
-          otherwise detected note + octave + cents */}
-      {pickingKey ? (
-        // biome-ignore lint/a11y/useSemanticElements: SVG has no native button element to swap to
-        <g
-          onClick={onSelectET}
-          role="button"
-          tabIndex={0}
-          aria-label="Select equal temperament"
-          style={{ cursor: "pointer" }}
-        >
-          <rect
-            x={CX - 26}
-            y={CY - 11}
-            width={52}
-            height={22}
-            rx={6}
-            fill="var(--bg-surface)"
-            stroke="var(--border)"
-            strokeWidth={1.25}
-          />
-          <text
-            x={CX}
-            y={CY + 1}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={8}
-            fontWeight="600"
-            fill="var(--text)"
-            fontFamily="system-ui, sans-serif"
-            style={{ pointerEvents: "none" }}
-          >
-            Equal Temp.
-          </text>
-        </g>
-      ) : activeNoteIdxs.size > 0 ? null : hasNote && noteName ? (
+      {/* Center: blank while any note is playing, otherwise detected note + octave + cents */}
+      {activeNoteIdxs.size > 0 ? null : hasNote && noteName ? (
         <>
           <text
             x={CX}
@@ -330,34 +267,6 @@ function PitchWheel({
   )
 }
 
-interface KeyPickerProps {
-  selectedKey: string
-  temperament: "ji" | "et"
-  pickingKey: boolean
-  onToggle: () => void
-}
-
-function KeyPicker({ selectedKey, temperament, pickingKey, onToggle }: KeyPickerProps) {
-  const selectedIdx = NOTE_NAMES.indexOf(selectedKey)
-  const chipLabel = temperament === "et" ? "Equal Temp." : `Key: ${selectedKey}`
-  const chipColor =
-    temperament === "et" ? "var(--text-muted)" : wedgeColor(selectedIdx, "reference")
-
-  return (
-    <button
-      type="button"
-      className={`flex items-center gap-1 py-0.5 px-1.5 text-xs rounded${pickingKey ? " bg-[#646cff] border-[#646cff] text-white" : " bg-transparent border-transparent"}`}
-      style={pickingKey ? undefined : { color: chipColor }}
-      onClick={onToggle}
-      aria-pressed={pickingKey}
-      aria-label={`${chipLabel}. Tap to ${pickingKey ? "stop" : "start"} choosing a key on the wheel.`}
-    >
-      {chipLabel}
-      <Pencil size={12} />
-    </button>
-  )
-}
-
 interface PitchInfo {
   note: string
   octave: number
@@ -377,8 +286,6 @@ const HYSTERESIS_CENTS = 5
 const SILENCE_HOLD_MS = 300
 
 interface Props {
-  defaultKey: string
-  defaultTemperament?: "ji" | "et"
   defaultSize?: "small" | "large"
   variant?: "floating" | "inline"
   visible?: boolean
@@ -390,8 +297,6 @@ interface Props {
 }
 
 export default function Tuner({
-  defaultKey,
-  defaultTemperament = "ji",
   defaultSize = "small",
   variant = "floating",
   visible = true,
@@ -401,51 +306,11 @@ export default function Tuner({
   const [active, setActive] = useState(false)
   const [pitch, setPitch] = useState<PitchInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [selectedKey, setSelectedKey] = useState(() => ENHARMONIC[defaultKey] ?? defaultKey)
-  const [temperament, setTemperament] = useState<"ji" | "et">(defaultTemperament)
   const [size, setSize] = useState<"small" | "large">(defaultSize)
-  const [pickingKey, setPickingKey] = useState(false)
-  const wheelAreaRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!pickingKey) return
-
-    function handlePointerDown(e: PointerEvent) {
-      if (wheelAreaRef.current && !wheelAreaRef.current.contains(e.target as Node)) {
-        setPickingKey(false)
-      }
-    }
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setPickingKey(false)
-    }
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [pickingKey])
-
-  const pickingKeyRef = useRef(pickingKey)
-  useEffect(() => {
-    pickingKeyRef.current = pickingKey
-  }, [pickingKey])
-
-  const selectedKeyRef = useRef(selectedKey)
-  const temperamentRef = useRef(temperament)
-  // The sticky target below is derived from the key and temperament, so it has to be
-  // dropped when either changes or the wheel keeps aiming at the old tuning.
+  // The displayed target is sticky so the note name has hysteresis at wedge edges rather
+  // than depending on frames agreeing with each other.
   const displayedTargetRef = useRef<Target | null>(null)
-
-  useEffect(() => {
-    selectedKeyRef.current = selectedKey
-    displayedTargetRef.current = null
-  }, [selectedKey])
-
-  useEffect(() => {
-    temperamentRef.current = temperament
-    displayedTargetRef.current = null
-  }, [temperament])
 
   const audioRef = useRef<{
     ctx: AudioContext
@@ -458,8 +323,7 @@ export default function Tuner({
   const lastTickRef = useRef<number>(0)
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Smoothing, all in the cents domain: median-of-3 to reject single bad frames, then a
-  // light EMA. The displayed target is sticky so the note name has hysteresis at wedge
-  // edges rather than depending on frames agreeing with each other.
+  // light EMA.
   const historyRef = useRef<[number, number, number]>([0, 0, 0])
   const historyCountRef = useRef(0)
   const smoothedCentsRef = useRef<number | null>(null)
@@ -557,9 +421,9 @@ export default function Tuner({
         }
         lastTickRef.current = timestamp
 
-        if (gesturesAudioRef.current.size > 0 || pickingKeyRef.current) {
-          // A wheel note is playing, or the user is picking a key — skip analysis so
-          // the mic doesn't drive the display while attention is on the wheel/chip.
+        if (gesturesAudioRef.current.size > 0) {
+          // A wheel note is playing — skip analysis so the mic doesn't drive the display
+          // while attention is on the wheel.
           animRef.current = requestAnimationFrame(tick)
           return
         }
@@ -595,20 +459,14 @@ export default function Tuner({
           const smoothed = smoothedCentsRef.current
 
           // Hysteresis: hold the current target until the pitch passes a little past the
-          // wedge edge, which in JI is the midpoint between adjacent just targets.
+          // wedge edge — 50¢, the midpoint to the next note.
           const target = displayedTargetRef.current
           const deviation = target === null ? 0 : smoothed - target.targetCents
           const held =
             target !== null &&
-            deviation <= target.gapUp / 2 + HYSTERESIS_CENTS &&
-            deviation >= -target.gapDown / 2 - HYSTERESIS_CENTS
-          const current = held
-            ? target
-            : nearestTarget(
-                smoothed,
-                temperamentRef.current,
-                NOTE_NAMES.indexOf(selectedKeyRef.current),
-              )
+            deviation <= 50 + HYSTERESIS_CENTS &&
+            deviation >= -50 - HYSTERESIS_CENTS
+          const current = held ? target : etTarget(smoothed)
           displayedTargetRef.current = current
 
           const offset = smoothed - current.targetCents
@@ -617,7 +475,7 @@ export default function Tuner({
             note,
             octave,
             cents: Math.round(offset),
-            angleOffset: centsToAngle(offset, current),
+            angleOffset: centsToAngle(offset),
           })
         } else if (!silenceTimerRef.current) {
           silenceTimerRef.current = setTimeout(() => {
@@ -685,7 +543,6 @@ export default function Tuner({
   const absC = pitch ? Math.abs(pitch.cents) : 0
   const centsColor = pitch ? (absC <= 10 ? "#4ade80" : absC <= 25 ? "#facc15" : "#f87171") : "#888"
   const detectedNoteIdx = active && pitch ? NOTE_NAMES.indexOf(pitch.note) : null
-  const referenceNoteIdx = NOTE_NAMES.indexOf(selectedKey)
   const isFloating = variant === "floating"
 
   return (
@@ -721,37 +578,17 @@ export default function Tuner({
           >
             {size === "large" ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
-          <div ref={wheelAreaRef} className="flex flex-col items-center gap-1">
-            <PitchWheel
-              detectedNoteIdx={detectedNoteIdx}
-              cents={pitch?.cents ?? 0}
-              angleOffset={pitch?.angleOffset ?? 0}
-              color={centsColor}
-              noteName={active ? (pitch?.note ?? null) : null}
-              octave={active ? (pitch?.octave ?? null) : null}
-              referenceNoteIdx={referenceNoteIdx}
-              temperament={temperament}
-              pickingKey={pickingKey}
-              onPlayStart={handlePlayStart}
-              onNoteChange={handleNoteChange}
-              onPlayStop={handlePlayStop}
-              onSelectKey={(noteIdx) => {
-                setSelectedKey(NOTE_NAMES[noteIdx])
-                setTemperament("ji")
-                setPickingKey(false)
-              }}
-              onSelectET={() => {
-                setTemperament("et")
-                setPickingKey(false)
-              }}
-            />
-            <KeyPicker
-              selectedKey={selectedKey}
-              temperament={temperament}
-              pickingKey={pickingKey}
-              onToggle={() => setPickingKey((v) => !v)}
-            />
-          </div>
+          <PitchWheel
+            detectedNoteIdx={detectedNoteIdx}
+            cents={pitch?.cents ?? 0}
+            angleOffset={pitch?.angleOffset ?? 0}
+            color={centsColor}
+            noteName={active ? (pitch?.note ?? null) : null}
+            octave={active ? (pitch?.octave ?? null) : null}
+            onPlayStart={handlePlayStart}
+            onNoteChange={handleNoteChange}
+            onPlayStop={handlePlayStop}
+          />
         </div>
       )}
       {!active && error && (

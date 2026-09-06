@@ -1,11 +1,9 @@
 ## Purpose
 
 The pitch wheel widget in `Tuner.tsx` visually represents the barbershop tuner's 12 chromatic notes as wedges arranged in a circle.
-This spec defines its color and sizing behavior: how each note's identity is conveyed via hue, how state (idle, reference key, active) is conveyed via saturation/lightness, and how accuracy feedback (the arc segment and cents readout) stays a separate, unaffected color channel.
-It also defines the accuracy arc itself — its geometry, its alignment reference, and the mapping from cents deviation to angular offset in each temperament.
-
+This spec defines its color and sizing behavior: how each note's identity is conveyed via hue, how state (idle, active) is conveyed via saturation/lightness, and how accuracy feedback (the arc segment and cents readout) stays a separate, unaffected color channel.
+It also defines the accuracy arc itself — its geometry, its alignment reference, and the mapping from cents deviation to angular offset.
 ## Requirements
-
 ### Requirement: Per-note wedge hue identity
 The pitch wheel SHALL render each of its 12 note wedges with a fixed hue derived from that note's index (`hue = noteIndex * 30` degrees), so a wedge's color-wheel position matches its position on the pitch wheel.
 This hue assignment SHALL be scoped to the wedges only.
@@ -13,26 +11,6 @@ This hue assignment SHALL be scoped to the wedges only.
 #### Scenario: Wedge hue matches wheel position
 - **WHEN** the pitch wheel renders any of the 12 note wedges
 - **THEN** that wedge's fill and stroke colors are derived from a hue equal to its note index times 30 degrees, independent of the app's light/dark theme
-
-### Requirement: State-driven wedge color intensity
-Each wedge's saturation and lightness SHALL vary across three tiers — idle, reference key, and active — while its hue stays fixed.
-This lets the current state of a wedge be distinguishable primarily through a lightness/chroma contrast rather than through hue alone.
-
-#### Scenario: Idle wedge shows a low-saturation tint of its hue
-- **WHEN** a wedge is not the detected pitch, not being played, and not the current reference key
-- **THEN** it renders with a low-chroma tint of its own hue, rather than a flat muted-gray fill
-
-#### Scenario: Reference-key wedge shows a border outlining the whole wedge
-- **WHEN** a wedge's note is the currently selected reference key, it is not otherwise active, and the tuner is in just-intonation mode
-- **THEN** the wedge's full outline (both radial edges, the inner arc, and the outer arc) is stroked in that note's own hue, at the same chroma level between the idle and active tiers used previously, rather than showing a separate point marker
-
-#### Scenario: No reference marker in equal-temperament mode
-- **WHEN** the tuner is in equal-temperament mode
-- **THEN** no wedge renders the reference-key border, regardless of which note was last selected as the key
-
-#### Scenario: Active wedge shows a full-saturation fill
-- **WHEN** a wedge's note is either the currently detected pitch or is being played via the tap-to-hear gesture
-- **THEN** it renders a high-chroma, high-contrast fill in that note's own hue
 
 ### Requirement: Detected and played states render identically
 Since a wedge cannot simultaneously be the mic-detected pitch and be actively played (playing pauses pitch detection), the wheel SHALL NOT visually distinguish between these two triggers of the active tier.
@@ -68,55 +46,6 @@ This replaces the rotating needle, which offered no reference against which to j
 #### Scenario: No needle is rendered
 - **WHEN** a pitch is detected
 - **THEN** the wheel renders the arc segment and no needle line or needle tip
-
-### Requirement: Wedges stay uniform in both temperaments
-The wheel SHALL always render 12 wedges of equal angular width, in both equal-temperament and just-intonation modes, and SHALL NOT resize or reposition wedges when the reference key changes.
-The wheel is a map of scale-degree positions, not a proportional map of pitch space.
-This preserves the wedge hue rule (`hue = noteIndex * 30`), which requires a wedge's position on the wheel to match its position on the color wheel, and it keeps the wheel's tap-and-glide landmarks fixed as the key changes.
-
-#### Scenario: Wedge geometry is unchanged by temperament mode
-- **WHEN** the tuner switches between equal-temperament and just-intonation modes
-- **THEN** all 12 wedges keep the same angular width and position
-
-#### Scenario: Wedge geometry is unchanged by reference key
-- **WHEN** the user selects a different reference key while in just-intonation mode
-- **THEN** all 12 wedges keep the same angular width and position
-
-### Requirement: Cents-to-angle mapping is piecewise linear between tuning targets
-Each wedge's angular center SHALL represent that note's tuning target — the equal-tempered pitch in equal-temperament mode, or the just-intonation target for that scale degree relative to the reference key in just-intonation mode.
-Because just-intonation targets are not evenly spaced, the arc's angular offset SHALL scale the pitch deviation by the distance to the neighboring target in the direction of that deviation, rather than by a fixed cents-per-degree rate.
-The offset SHALL be clamped to half a wedge's width, which corresponds to the midpoint between the current target and that neighbor.
-The resulting mapping SHALL be continuous and monotonic across wedge boundaries in both modes.
-
-In equal-temperament mode every neighboring target is 100¢ away, so this reduces exactly to the previous fixed rate with 50¢ mapping to half a wedge.
-
-#### Scenario: Equal temperament maps fifty cents to half a wedge
-- **WHEN** a detected pitch deviates by 50¢ while the tuner is in equal-temperament mode
-- **THEN** the arc is offset by exactly half a wedge's angular width, leaving it half overlapping its wedge
-
-#### Scenario: Deviation toward a close neighbor subtends more angle
-- **WHEN** a pitch is detected on a scale degree whose neighboring just-intonation target in that direction is closer than 100¢ away, such as the major third in the key of C, whose neighbor above is 70.7¢ away
-- **THEN** a given deviation in cents rotates the arc further than the same deviation would in equal-temperament mode, and the arc reaches the wedge edge exactly at the midpoint to that neighbor
-
-#### Scenario: Deviation toward a distant neighbor subtends less angle
-- **WHEN** a pitch is detected on a scale degree whose neighboring just-intonation target in that direction is further than 100¢ away, such as the sixth degree in the key of C, whose neighbor above is 133.2¢ away
-- **THEN** a given deviation in cents rotates the arc less than the same deviation would in equal-temperament mode, and the arc still reaches the wedge edge exactly at the midpoint to that neighbor
-
-#### Scenario: Every part of every wedge is reachable
-- **WHEN** a pitch sweeps across the full span between two adjacent just-intonation targets
-- **THEN** the arc sweeps the full half-wedge on each side, with no portion of either wedge left unreachable
-
-#### Scenario: Arc never freezes mid-sweep
-- **WHEN** a pitch sweeps continuously between two adjacent just-intonation targets more than 100¢ apart
-- **THEN** the arc moves continuously throughout, without a range of pitches over which it sits motionless at a wedge edge
-
-#### Scenario: Arc motion is continuous across a note change in just intonation
-- **WHEN** a rising pitch in just-intonation mode crosses from near the top of one wedge into the bottom of the next
-- **THEN** the arc's position moves continuously through the crossing, with no visible jump
-
-#### Scenario: Arc motion is monotonic
-- **WHEN** a detected pitch rises steadily through any part of the wheel in either mode
-- **THEN** the arc rotates steadily in one direction and never moves backward
 
 ### Requirement: Wedge dividers extend across the arc band
 The wedge divider lines SHALL extend inward past the wedge ring's inner edge to span the arc band's radial range.
@@ -163,77 +92,10 @@ The pitch wheel SHALL render at a size determined by the enclosing panel's size 
 - **WHEN** the tuner is opened on the search page (defaulting to large) and, separately, on a tag page (defaulting to small)
 - **THEN** the pitch wheel renders at different sizes in each place, reflecting each page's default panel size
 
-### Requirement: Equal temperament as a second tuning mode
-The tuner SHALL support two temperament modes — just-intonation (relative to a selected reference key) and equal-temperament — as an independent axis from the selected reference key.
-Switching modes SHALL NOT discard the last-selected reference key.
-The reference key and temperament mode are set by tapping the pitch wheel's wedges or center face while key-select mode is active (toggled via the `tuner-key-picker` button), not by the wheel's normal tap-to-play/glide gesture.
-
-#### Scenario: Cents readout reflects equal-tempered pitch in equal-temperament mode
-- **WHEN** a pitch is detected while the tuner is in equal-temperament mode
-- **THEN** the displayed cents offset is the raw equal-tempered deviation, without any just-intonation offset applied relative to a key
-
-### Requirement: Key-select mode changes wedge tap behavior
-When key-select mode is active, tapping a wedge SHALL set the reference key to that wedge's note and switch to just-intonation mode, instead of playing that note's pitch-pipe tone.
-While key-select mode is active, the wheel SHALL NOT start any tap-to-play or drag-to-glide gesture.
-
-#### Scenario: Wedge tap sets the key instead of playing a tone
-- **WHEN** the user taps a wedge while key-select mode is active
-- **THEN** that note becomes the reference key, the tuner switches to just-intonation mode, and no oscillator tone is played
-
-#### Scenario: Drag-to-glide is suspended during key-select mode
-- **WHEN** the user presses and drags across the wheel while key-select mode is active
-- **THEN** no notes are played as the pointer crosses wedges
-
-### Requirement: Key-select mode makes the center face a visible "Equal Temp." button
-When key-select mode is active, the wheel's center face SHALL render a visible button, bordered/shadowed to look distinctly tappable and labeled `Equal Temp.`, that switches the tuner to equal-temperament mode when tapped.
-When key-select mode is inactive, the center face SHALL NOT intercept pointer input and SHALL NOT display the `Equal Temp.` button, preserving its existing idle/detected-pitch display.
-
-#### Scenario: Center button selects equal temperament
-- **WHEN** the user taps the center face's `Equal Temp.` button while key-select mode is active
-- **THEN** the tuner switches to equal-temperament mode and key-select mode exits
-
-#### Scenario: Center face is inert outside key-select mode
-- **WHEN** key-select mode is inactive
-- **THEN** the center face does not respond to pointer input, does not show the `Equal Temp.` button, and continues to display the detected note/octave/cents or nothing, as before this change
-
-### Requirement: Wedges render a distinct visual tier during key-select mode
-While key-select mode is active, every wedge SHALL render in a visual tier distinct from its normal idle, reference, and active tiers, so the wheel as a whole is visually distinguishable as being in a different mode without using any text.
-
-#### Scenario: Wedges look different in key-select mode
-- **WHEN** key-select mode is active
-- **THEN** every wedge renders with a color treatment distinct from the idle tier it would otherwise show, communicating the mode change through color alone
-
-#### Scenario: Wedges return to normal tiers on exit
-- **WHEN** key-select mode exits, whether by selection, tapping outside, the button, or Escape
-- **THEN** every wedge returns to rendering its normal idle/reference/active tier as determined by detected pitch and reference key
-
-### Requirement: Wedge accessible label describes tap-to-play and glide
-Each wedge's accessible label SHALL describe both that tapping it plays its tone and that dragging across the ring plays other notes as they're crossed, when key-select mode is inactive.
-When key-select mode is active, each wedge's accessible label SHALL instead describe that tapping it sets the reference key to that note.
-
-#### Scenario: Wedge accessible label mentions playing and gliding outside key-select mode
-- **WHEN** an assistive technology reads a wedge's hit-target label while key-select mode is inactive
-- **THEN** the label mentions both that tapping the wedge plays that note's tone and that dragging across the ring plays other notes as the pointer crosses them
-
-#### Scenario: Wedge accessible label describes key selection during key-select mode
-- **WHEN** an assistive technology reads a wedge's hit-target label while key-select mode is active
-- **THEN** the label states that tapping the wedge sets the reference key to that note
-
-### Requirement: Page-level default temperament
-The `Tuner` component SHALL accept an optional default temperament, used when there is no meaningful reference key to default to.
-
-#### Scenario: Search page starts in equal-temperament mode
-- **WHEN** the tuner is opened on the search page, which has no specific tag or key context
-- **THEN** it starts in equal-temperament mode
-
-#### Scenario: Tag page starts in just-intonation mode
-- **WHEN** the tuner is opened on a tag page
-- **THEN** it starts in just-intonation mode using that tag's key, as before
-
 ### Requirement: Accidental wedges show a secondary enharmonic name
 Each of the 5 accidental note wedges (`C#/Db`, `D#/Eb`, `F#/Gb`, `Ab/G#`, `Bb/A#`) SHALL render both names as a stacked two-line label, with the first-listed name as primary (top line) and the second-listed name as secondary (bottom line).
 The 7 natural-note wedges (`C D E F G A B`) SHALL continue to render a single-line label, unchanged.
-This labeling SHALL be static: it does not depend on the currently selected reference key or temperament mode.
+This labeling SHALL be static: it does not depend on the detected pitch or any other wheel state.
 
 #### Scenario: Accidental wedge renders two stacked names
 - **WHEN** the pitch wheel renders the wedge at note index 1 (sharp name `C#`)
@@ -247,9 +109,9 @@ This labeling SHALL be static: it does not depend on the currently selected refe
 - **WHEN** the pitch wheel renders a natural-note wedge (e.g. note index 0, `C`)
 - **THEN** the wedge displays a single-line label reading `C`, with no secondary line
 
-#### Scenario: Label does not change with selected key or temperament
-- **WHEN** the user changes the reference key or switches temperament mode
-- **THEN** every wedge's primary/secondary label content stays the same as before the change
+#### Scenario: Label does not change with wheel state
+- **WHEN** the detected pitch changes or a wedge becomes active
+- **THEN** every wedge's primary/secondary label content stays the same as before
 
 ### Requirement: Secondary enharmonic name is visually subordinate
 The secondary (bottom) line of an accidental wedge's label SHALL render at a smaller font size and reduced opacity relative to the primary (top) line, while both lines SHALL use the same fill color rule as the wheel's existing active/inactive text color (`var(--note-text-on-active)` vs. `var(--text)`).
@@ -261,3 +123,50 @@ The secondary (bottom) line of an accidental wedge's label SHALL render at a sma
 #### Scenario: Secondary line follows active-state color like primary
 - **WHEN** an accidental wedge becomes active (detected or played)
 - **THEN** both the primary and secondary lines switch to the active-state text color, with the secondary line retaining its reduced opacity relative to the primary
+
+### Requirement: Two-tier wedge color intensity
+Each wedge's saturation and lightness SHALL vary across two tiers — idle and active — while its hue stays fixed.
+This lets the current state of a wedge be distinguishable primarily through a lightness/chroma contrast rather than through hue alone.
+
+#### Scenario: Idle wedge shows a low-saturation tint of its hue
+- **WHEN** a wedge is not the detected pitch and not being played
+- **THEN** it renders with a low-chroma tint of its own hue, rather than a flat muted-gray fill
+
+#### Scenario: Active wedge shows a full-saturation fill
+- **WHEN** a wedge's note is either the currently detected pitch or is being played via the tap-to-hear gesture
+- **THEN** it renders a high-chroma, high-contrast fill in that note's own hue
+
+### Requirement: Wedge accessible label describes tapping and gliding
+Each wedge's accessible label SHALL describe both that tapping it plays its tone and that dragging across the ring plays other notes as they're crossed.
+
+#### Scenario: Wedge accessible label mentions playing and gliding
+- **WHEN** an assistive technology reads a wedge's hit-target label
+- **THEN** the label mentions both that tapping the wedge plays that note's tone and that dragging across the ring plays other notes as the pointer crosses them
+
+### Requirement: Wedge geometry is fixed and uniform
+The wheel SHALL always render 12 wedges of equal angular width at fixed positions.
+The wheel is a map of the 12 chromatic scale-degree positions, not a proportional map of pitch space.
+This preserves the wedge hue rule (`hue = noteIndex * 30`), which requires a wedge's position on the wheel to match its position on the color wheel, and it keeps the wheel's tap-and-glide landmarks fixed.
+
+#### Scenario: Wedge geometry never changes
+- **WHEN** the tuner is running, idle, or has a pitch detected
+- **THEN** all 12 wedges keep the same angular width and position
+
+### Requirement: Cents-to-angle mapping is a fixed rate
+Each wedge's angular center SHALL represent that note's equal-tempered pitch.
+The accuracy arc's angular offset from that center SHALL be proportional to the pitch deviation in cents, at a fixed rate of half a wedge's angular width per 50 cents.
+The offset SHALL be clamped to half a wedge's width, which corresponds to the equal-tempered midpoint between adjacent notes.
+The resulting mapping SHALL be continuous and monotonic across wedge boundaries.
+
+#### Scenario: Fifty cents maps to half a wedge
+- **WHEN** a detected pitch deviates by 50¢ from its note's equal-tempered pitch
+- **THEN** the arc is offset by exactly half a wedge's angular width, leaving it half overlapping its wedge
+
+#### Scenario: Deviation beyond half a wedge is clamped
+- **WHEN** a detected pitch deviates by more than 50¢ from its note's equal-tempered pitch
+- **THEN** the arc's angular offset is clamped to half a wedge's width rather than continuing to rotate
+
+#### Scenario: Arc motion is continuous and monotonic
+- **WHEN** a detected pitch rises steadily through any part of the wheel
+- **THEN** the arc rotates steadily in one direction, never backward, and moves continuously across each note boundary
+
