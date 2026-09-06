@@ -163,6 +163,13 @@ export default function PlayerPage() {
   const waveformDragStartXRef = useRef(0)
   const waveformDragStartTimeRef = useRef(0)
 
+  const minimapViewportRef = useRef<HTMLDivElement>(null)
+  const minimapCanvasRef = useRef<HTMLCanvasElement>(null)
+  const minimapPlayheadRef = useRef<HTMLDivElement>(null)
+  const minimapWindowRef = useRef<HTMLDivElement>(null)
+  const minimapWidthRef = useRef(0)
+  const minimapPointerActiveRef = useRef(false)
+
   const dragTrackIdRef = useRef<string | null>(null)
   const dragStartYRef = useRef(0)
   const dragOriginIndexRef = useRef(0)
@@ -313,6 +320,8 @@ export default function PlayerPage() {
       // would keep showing through behind the "Loading…" placeholder.
       const canvas = waveformCanvasRef.current
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height)
+      const minimapCanvas = minimapCanvasRef.current
+      minimapCanvas?.getContext("2d")?.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height)
       computeFileWaveform(track.blob)
         .then((peaks) => {
           if (waveformRequestIdRef.current === requestId) setWaveformPeaks(peaks)
@@ -524,6 +533,51 @@ export default function PlayerPage() {
     }
   }, [waveformPeaks])
 
+  // The minimap shows the whole track at once (one device pixel column per
+  // resampled peak bucket), so its width tracks the element rather than the
+  // bucket count — redrawn on peaks-ready and on resize.
+  const drawMinimap = useCallback(() => {
+    const wrapper = minimapViewportRef.current
+    const canvas = minimapCanvasRef.current
+    if (!wrapper || !canvas || !waveformPeaks) return
+    const cssWidth = wrapper.clientWidth
+    const cssHeight = wrapper.clientHeight
+    if (cssWidth === 0 || cssHeight === 0) return
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = Math.round(cssWidth * dpr)
+    canvas.height = Math.round(cssHeight * dpr)
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = getComputedStyle(canvas).color
+    const mid = canvas.height / 2
+    const { min, max, bucketCount } = waveformPeaks
+    for (let x = 0; x < canvas.width; x++) {
+      const b = Math.min(bucketCount - 1, Math.floor((x / canvas.width) * bucketCount))
+      const yTop = mid + min[b] * mid
+      const yBottom = mid + max[b] * mid
+      ctx.fillRect(x, yTop, 1, Math.max(1, yBottom - yTop))
+    }
+  }, [waveformPeaks])
+
+  // Re-attaches on the active track since the minimap only exists in the DOM
+  // once a track is loaded; drawMinimap's own dependency on waveformPeaks covers
+  // the redraw when analysis finishes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: activeTrack drives a DOM (re)mount, not read directly in the effect body
+  useEffect(() => {
+    const el = minimapViewportRef.current
+    if (!el) return
+    minimapWidthRef.current = el.clientWidth
+    drawMinimap()
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) minimapWidthRef.current = entry.contentRect.width
+      drawMinimap()
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [drawMinimap, activeTrack])
+
   // Tracks the waveform viewport's width for the pan-offset math below, without
   // triggering a re-render on resize. Re-attaches on the active track since the
   // viewport only exists in the DOM once a track is loaded.
@@ -559,6 +613,30 @@ export default function PlayerPage() {
 
     canvas.style.transform = `translateX(${offset}px)`
     playhead.style.left = `${clamp(offset + time * WAVEFORM_PX_PER_SEC, 0, viewportWidth)}px`
+
+    // The minimap playhead and window box are driven from the same frame: the
+    // window box marks the slice the detail waveform above is currently showing,
+    // derived from the very `offset` just computed so the two never disagree.
+    const minimapWidth = minimapWidthRef.current
+    const minimapPlayhead = minimapPlayheadRef.current
+    const minimapWindow = minimapWindowRef.current
+    const trackDuration = audioRef.current?.duration ?? 0
+    if (minimapWidth > 0 && Number.isFinite(trackDuration) && trackDuration > 0) {
+      if (minimapPlayhead) {
+        minimapPlayhead.style.left = `${(time / trackDuration) * minimapWidth}px`
+        minimapPlayhead.hidden = false
+      }
+      if (minimapWindow) {
+        const spanSeconds = viewportWidth / WAVEFORM_PX_PER_SEC
+        const startTime = canvasWidth <= viewportWidth ? 0 : -offset / WAVEFORM_PX_PER_SEC
+        minimapWindow.style.left = `${(startTime / trackDuration) * minimapWidth}px`
+        minimapWindow.style.width = `${clamp(spanSeconds / trackDuration, 0, 1) * minimapWidth}px`
+        minimapWindow.hidden = false
+      }
+    } else {
+      if (minimapPlayhead) minimapPlayhead.hidden = true
+      if (minimapWindow) minimapWindow.hidden = true
+    }
   }, [])
 
   // Pans the waveform every frame — timeupdate fires too sparsely (~4Hz) for smooth
@@ -620,6 +698,37 @@ export default function PlayerPage() {
     waveformDragConfirmedRef.current = false
 
     if (!wasDrag) togglePlay()
+  }
+
+  // Unlike the waveform's relative drag, every press on the minimap is an
+  // absolute seek: pointer x maps straight to a fraction of the whole track.
+  function seekFromMinimap(clientX: number) {
+    const wrapper = minimapViewportRef.current
+    const audio = audioRef.current
+    if (!wrapper || !audio) return
+    const rect = wrapper.getBoundingClientRect()
+    const max = duration || audio.duration || 0
+    if (rect.width === 0 || max <= 0) return
+    const time = clamp(((clientX - rect.left) / rect.width) * max, 0, max)
+    handleScrub(time)
+    panWaveformTo(time)
+  }
+
+  function handleMinimapPointerDown(e: React.PointerEvent) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    minimapPointerActiveRef.current = true
+    seekFromMinimap(e.clientX)
+  }
+
+  function handleMinimapPointerMove(e: React.PointerEvent) {
+    if (!minimapPointerActiveRef.current) return
+    seekFromMinimap(e.clientX)
+  }
+
+  function handleMinimapPointerUp(e: React.PointerEvent) {
+    if (!minimapPointerActiveRef.current) return
+    minimapPointerActiveRef.current = false
+    e.currentTarget.releasePointerCapture?.(e.pointerId)
   }
 
   function handleBalanceChange(value: number) {
@@ -824,16 +933,52 @@ export default function PlayerPage() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <input
-                type="range"
-                min={0}
-                max={duration || 0}
-                step={0.1}
-                value={currentTime}
-                onChange={(e) => handleScrub(Number(e.target.value))}
-                className="w-full"
-                aria-label="Playback position"
-              />
+              {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: pointer-only seek surface, no native role fits; the visually-hidden range input below is the keyboard/AT equivalent */}
+              <div
+                ref={minimapViewportRef}
+                className="relative h-8 overflow-hidden rounded-md touch-none select-none"
+                style={{ backgroundColor: "var(--bg-surface)" }}
+                onPointerDown={handleMinimapPointerDown}
+                onPointerMove={handleMinimapPointerMove}
+                onPointerUp={handleMinimapPointerUp}
+                onPointerCancel={handleMinimapPointerUp}
+                aria-label="Track minimap — tap or drag anywhere to seek"
+              >
+                {isAnalyzingWaveform && (
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--text-muted)]">
+                    Loading…
+                  </div>
+                )}
+                <canvas
+                  ref={minimapCanvasRef}
+                  className="absolute inset-0 h-full w-full"
+                  style={{ color: "var(--text-muted)" }}
+                />
+                <div
+                  ref={minimapWindowRef}
+                  hidden
+                  className="pointer-events-none absolute inset-y-0"
+                  style={{
+                    border: "1px solid var(--accent)",
+                    backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)",
+                  }}
+                />
+                <div
+                  ref={minimapPlayheadRef}
+                  hidden
+                  className="pointer-events-none absolute inset-y-0 w-px bg-[var(--accent)]"
+                />
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 0}
+                  step={0.1}
+                  value={currentTime}
+                  onChange={(e) => handleScrub(Number(e.target.value))}
+                  className="sr-only"
+                  aria-label="Playback position"
+                />
+              </div>
               <div className="flex justify-between text-xs text-[var(--text-muted)]">
                 <span>{formatTime(currentTime)}</span>
                 <span>{formatTime(duration)}</span>
@@ -879,62 +1024,68 @@ export default function PlayerPage() {
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
-              <input
-                id="balance-slider"
-                type="range"
-                min={-1}
-                max={1}
-                step={0.01}
-                value={balance}
-                onChange={(e) => handleBalanceChange(Number(e.target.value))}
-                onDoubleClick={() => handleBalanceChange(0)}
-                onTouchEnd={handleBalanceTouchEnd}
-                aria-label="Balance"
-                className="flex-1 max-w-[10rem]"
-              />
-              <span className="text-xs text-[var(--text-muted)] w-14 shrink-0">
-                {formatBalance(balance)}
-              </span>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <div className="flex flex-col gap-3 rounded-lg border border-[var(--border)] p-3">
+              <div className="flex items-center gap-3 text-sm">
+                <span className="w-16 shrink-0 text-[var(--text-muted)]">Speed</span>
+                <button
+                  type="button"
+                  className="bg-transparent border-0 p-0 disabled:opacity-40"
+                  style={{ color: "var(--text-muted)" }}
+                  onClick={() => handleSpeedStep(-1)}
+                  disabled={getAdjacentSpeed(-1) === null}
+                  aria-label="Decrease speed"
+                >
+                  <Minus size={16} />
+                </button>
+                <span className="w-12 text-center tabular-nums">{speed}x</span>
+                <button
+                  type="button"
+                  className="bg-transparent border-0 p-0 disabled:opacity-40"
+                  style={{ color: "var(--text-muted)" }}
+                  onClick={() => handleSpeedStep(1)}
+                  disabled={getAdjacentSpeed(1) === null}
+                  aria-label="Increase speed"
+                >
+                  <Plus size={16} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 text-sm">
+                <label htmlFor="balance-slider" className="w-16 shrink-0 text-[var(--text-muted)]">
+                  Balance
+                </label>
                 <input
+                  id="balance-slider"
+                  type="range"
+                  min={-1}
+                  max={1}
+                  step={0.01}
+                  value={balance}
+                  onChange={(e) => handleBalanceChange(Number(e.target.value))}
+                  onDoubleClick={() => handleBalanceChange(0)}
+                  onTouchEnd={handleBalanceTouchEnd}
+                  aria-label="Balance"
+                  className="flex-1 max-w-[10rem]"
+                />
+                <span className="text-xs text-[var(--text-muted)] w-14 shrink-0">
+                  {formatBalance(balance)}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3 text-sm">
+                <label
+                  htmlFor="mono-toggle"
+                  className="w-16 shrink-0 text-[var(--text-muted)] cursor-pointer"
+                >
+                  Mono
+                </label>
+                <input
+                  id="mono-toggle"
                   type="checkbox"
                   checked={mono}
                   onChange={(e) => handleMonoChange(e.target.checked)}
                 />
-                Mono
-              </label>
-            </div>
-
-            {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: no native role fits a mixed button/select control group; aria-label still documents it for screen readers */}
-            <div className="flex items-center gap-2 text-sm" aria-label="Playback speed">
-              <button
-                type="button"
-                className="bg-transparent border-0 p-0 disabled:opacity-40"
-                style={{ color: "var(--text-muted)" }}
-                onClick={() => handleSpeedStep(-1)}
-                disabled={getAdjacentSpeed(-1) === null}
-                aria-label="Decrease speed"
-              >
-                <Minus size={16} />
-              </button>
-              <select value={speed} onChange={(e) => handleSpeedChange(Number(e.target.value))}>
-                {SPEED_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}x
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="bg-transparent border-0 p-0 disabled:opacity-40"
-                style={{ color: "var(--text-muted)" }}
-                onClick={() => handleSpeedStep(1)}
-                disabled={getAdjacentSpeed(1) === null}
-                aria-label="Increase speed"
-              >
-                <Plus size={16} />
-              </button>
+              </div>
             </div>
           </div>
         )}
