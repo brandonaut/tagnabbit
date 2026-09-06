@@ -119,15 +119,19 @@
   }
 }
 
-/* Scrolls text in a continuous loop when it's wider than its container — see
+/* Scrolls text in a slow loop when it's wider than its container — see
    src/PlayerPage.tsx's file name display. The container holds two back-to-back
    copies of the text; sliding by exactly one copy's width (-50%) loops
-   seamlessly since the second copy lands where the first one started. */
+   seamlessly since the second copy lands where the first one started. The
+   holds at each end (and across the loop boundary) let the title rest at a
+   readable position between passes instead of scrolling relentlessly. */
 @keyframes marquee-loop {
-  from {
+  0%,
+  14% {
     transform: translateX(0);
   }
-  to {
+  86%,
+  100% {
     transform: translateX(-50%);
   }
 }

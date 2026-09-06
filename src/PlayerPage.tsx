@@ -16,9 +16,9 @@ import { useWakeLock } from "./useWakeLock"
 const SKIP_SECONDS = 10
 // Clears the bottom tab bar's own height (see Layout.tsx) plus its usual gap.
 const TUNER_FLOATING_BOTTOM = "calc(3.75rem + env(safe-area-inset-bottom) + 0.75rem)"
-const MARQUEE_PX_PER_SEC = 40
-const MARQUEE_MIN_SECONDS = 4
-const MARQUEE_MAX_SECONDS = 14
+const MARQUEE_PX_PER_SEC = 22
+const MARQUEE_MIN_SECONDS = 8
+const MARQUEE_MAX_SECONDS = 20
 const SPEED_OPTIONS = [0.5, 0.75, 0.9, 1, 1.25, 1.5, 2]
 const WAVEFORM_PX_PER_SEC = 40
 const WAVEFORM_HEIGHT = 56
