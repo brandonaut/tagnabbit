@@ -458,7 +458,7 @@ export default function PlayerPage() {
   function handleNextTrack() {
     const next = getAdjacentTrack(1)
     if (next) {
-      loadTrack(next, { autoplay: true })
+      loadTrack(next, { autoplay: isPlaying })
       return
     }
     // No next track — mirrors the previous-track control's fallback (jump to an
@@ -466,6 +466,17 @@ export default function PlayerPage() {
     const audio = audioRef.current
     if (!audio) return
     audio.currentTime = duration || audio.duration || 0
+  }
+
+  // Separate from handleNextTrack: reaching a track's natural end fires a
+  // `pause` event (per the HTML media spec) before `ended`, which already
+  // flips isPlaying to false by the time this runs — so this can't reuse
+  // handleNextTrack's isPlaying-based autoplay decision. Reaching "ended"
+  // means it was playing by definition, so this always autoplays the next
+  // track if one exists, and does nothing (no jump-to-end) otherwise.
+  function handleTrackEnded() {
+    const next = getAdjacentTrack(1)
+    if (next) loadTrack(next, { autoplay: true })
   }
 
   // Classic media-player "previous" behavior: restart the current track if
@@ -479,7 +490,7 @@ export default function PlayerPage() {
     }
     const prev = getAdjacentTrack(-1)
     if (prev) {
-      loadTrack(prev, { autoplay: true })
+      loadTrack(prev, { autoplay: isPlaying })
     } else {
       handleScrub(0)
     }
@@ -936,7 +947,7 @@ export default function PlayerPage() {
         onPause={() => setIsPlaying(false)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
-        onEnded={handleNextTrack}
+        onEnded={handleTrackEnded}
       />
 
       <Tuner
