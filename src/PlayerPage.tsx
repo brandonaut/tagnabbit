@@ -1,15 +1,4 @@
-import {
-  FastForward,
-  ListMusic,
-  Minus,
-  Music,
-  Pause,
-  Play,
-  Plus,
-  Rewind,
-  SkipBack,
-  SkipForward,
-} from "lucide-react"
+import { FastForward, Minus, Pause, Play, Plus, Rewind, SkipBack, SkipForward } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   addTracks,
@@ -20,7 +9,7 @@ import {
   reorderTracks,
   setGlobalState,
 } from "./cache/playerFile"
-import PlaylistModal from "./PlaylistModal"
+import PlaylistList from "./PlaylistList"
 import Tuner from "./Tuner"
 import { useWakeLock } from "./useWakeLock"
 
@@ -38,6 +27,10 @@ const WAVEFORM_HEIGHT = 56
 const TAP_MAX_MOVEMENT_PX = 6
 // Beyond this many pixels of horizontal swipe on a playlist row, releasing removes it.
 const SWIPE_REMOVE_THRESHOLD_PX = 80
+// Pointer travel on a playlist row before its gesture locks to an axis: a
+// horizontal lock becomes a swipe-to-remove, a vertical lock is left to the
+// browser as a list scroll.
+const SWIPE_DIRECTION_LOCK_PX = 10
 const DEFAULT_ROW_HEIGHT_PX = 56
 // The previous-track control restarts the current track below this many elapsed
 // seconds; past it, the first press restarts the track instead of switching tracks.
@@ -122,7 +115,6 @@ const DOUBLE_TAP_MS = 300
 export default function PlayerPage() {
   const [playlist, setPlaylist] = useState<PlaylistTrack[]>([])
   const [activeTrackId, setActiveTrackId] = useState<string | null>(null)
-  const [isPlaylistOpen, setIsPlaylistOpen] = useState(false)
   const [addTracksError, setAddTracksError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
@@ -131,7 +123,6 @@ export default function PlayerPage() {
   const [balance, setBalance] = useState(0)
   const [mono, setMono] = useState(false)
   const [speed, setSpeed] = useState(1)
-  const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [marqueeDistance, setMarqueeDistance] = useState(0)
   const [waveformPeaks, setWaveformPeaks] = useState<WaveformPeaks | null>(null)
   const [isAnalyzingWaveform, setIsAnalyzingWaveform] = useState(false)
@@ -178,6 +169,8 @@ export default function PlayerPage() {
   const swipePointerIdRef = useRef<number | null>(null)
   const swipeTrackIdRef = useRef<string | null>(null)
   const swipeStartXRef = useRef(0)
+  const swipeStartYRef = useRef(0)
+  const swipeAxisRef = useRef<"undecided" | "x" | "y">("undecided")
 
   useWakeLock(isPlaying)
 
@@ -364,7 +357,6 @@ export default function PlayerPage() {
 
   function handleSelectTrack(track: PlaylistTrack) {
     loadTrack(track, { autoplay: true })
-    setIsPlaylistOpen(false)
   }
 
   async function removeTrackFromPlaylist(id: string) {
@@ -429,13 +421,6 @@ export default function PlayerPage() {
       audioCtxRef.current?.close()
     }
   }, [])
-
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault()
-    setIsDraggingOver(false)
-    const files = Array.from(e.dataTransfer.files)
-    if (files.length > 0) handleFilesAdded(files)
-  }
 
   function togglePlay() {
     const audio = audioRef.current
@@ -807,16 +792,40 @@ export default function PlayerPage() {
     })
   }
 
+  // No pointer capture on press: the browser keeps handling the touch (so a
+  // vertical drag scrolls the list) until a move locks the gesture to the
+  // horizontal axis, at which point this takes the pointer for a swipe.
   function handleRowPointerDown(e: React.PointerEvent<HTMLDivElement>, track: PlaylistTrack) {
-    e.currentTarget.setPointerCapture(e.pointerId)
     swipePointerIdRef.current = e.pointerId
     swipeTrackIdRef.current = track.id
     swipeStartXRef.current = e.clientX
+    swipeStartYRef.current = e.clientY
+    swipeAxisRef.current = "undecided"
   }
 
   function handleRowPointerMove(e: React.PointerEvent<HTMLDivElement>, track: PlaylistTrack) {
     if (swipePointerIdRef.current !== e.pointerId || swipeTrackIdRef.current !== track.id) return
     const deltaX = e.clientX - swipeStartXRef.current
+    const deltaY = e.clientY - swipeStartYRef.current
+
+    if (swipeAxisRef.current === "undecided") {
+      if (
+        Math.abs(deltaX) < SWIPE_DIRECTION_LOCK_PX &&
+        Math.abs(deltaY) < SWIPE_DIRECTION_LOCK_PX
+      ) {
+        return
+      }
+      if (Math.abs(deltaY) >= Math.abs(deltaX)) {
+        // Vertical intent — let the browser scroll the list; stop tracking.
+        swipeAxisRef.current = "y"
+        swipePointerIdRef.current = null
+        swipeTrackIdRef.current = null
+        return
+      }
+      swipeAxisRef.current = "x"
+      e.currentTarget.setPointerCapture(e.pointerId)
+    }
+
     e.currentTarget.style.transform = `translateX(${deltaX}px)`
     // The reveal layer sits behind this row as its previous sibling — swiping
     // left uncovers its right side first (and vice versa), so the trash icon
@@ -828,9 +837,11 @@ export default function PlayerPage() {
   function handleRowPointerUp(e: React.PointerEvent<HTMLDivElement>, track: PlaylistTrack) {
     if (swipePointerIdRef.current !== e.pointerId) return
     const deltaX = e.clientX - swipeStartXRef.current
+    const wasSwipe = swipeAxisRef.current === "x"
     swipePointerIdRef.current = null
     swipeTrackIdRef.current = null
-    if (Math.abs(deltaX) > SWIPE_REMOVE_THRESHOLD_PX) {
+    swipeAxisRef.current = "undecided"
+    if (wasSwipe && Math.abs(deltaX) > SWIPE_REMOVE_THRESHOLD_PX) {
       removeTrackFromPlaylist(track.id)
     } else {
       e.currentTarget.style.transform = ""
@@ -838,42 +849,32 @@ export default function PlayerPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pt-4 px-4 pb-24 flex flex-col gap-4 relative">
-      <div className="flex items-center justify-between">
-        <h1 className="m-0 text-2xl font-bold">Player</h1>
-        <button
-          type="button"
-          onClick={() => setIsPlaylistOpen(true)}
-          className="flex items-center gap-1 text-sm"
-          style={{ backgroundColor: "var(--accent)", color: "#10141e" }}
-        >
-          <ListMusic size={18} />
-          Playlist{playlist.length > 0 ? ` (${playlist.length})` : ""}
-        </button>
-      </div>
+    <div
+      className="fixed inset-x-0 top-0 overflow-hidden"
+      style={{
+        bottom: "calc(3.75rem + env(safe-area-inset-bottom))",
+        paddingTop: "env(safe-area-inset-top)",
+      }}
+    >
+      <div className="max-w-2xl mx-auto h-full flex flex-col">
+        <PlaylistList
+          tracks={playlist}
+          activeTrackId={activeTrackId}
+          errorMessage={addTracksError}
+          onDismissError={() => setAddTracksError(null)}
+          onFilesAdded={handleFilesAdded}
+          onSelectTrack={handleSelectTrack}
+          onRemoveTrack={removeTrackFromPlaylist}
+          onDragHandlePointerDown={handleDragHandlePointerDown}
+          onDragHandlePointerMove={handleDragHandlePointerMove}
+          onDragHandlePointerUp={handleDragHandlePointerUp}
+          onRowPointerDown={handleRowPointerDown}
+          onRowPointerMove={handleRowPointerMove}
+          onRowPointerUp={handleRowPointerUp}
+        />
 
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop zone; the playlist modal's file picker covers keyboard/non-drag use */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault()
-          setIsDraggingOver(true)
-        }}
-        onDragLeave={() => setIsDraggingOver(false)}
-        onDrop={handleDrop}
-      >
-        {!activeTrack ? (
-          <div
-            className="flex flex-col items-center justify-center gap-2 py-12 px-4 rounded-lg border-2 border-dashed text-center"
-            style={{
-              borderColor: isDraggingOver ? "var(--accent)" : "var(--border)",
-              color: "var(--text-muted)",
-            }}
-          >
-            <Music size={32} />
-            <span>Playlist is empty</span>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-4">
+        {activeTrack && (
+          <div className="shrink-0 border-t border-[var(--border)] px-4 py-3 flex flex-col gap-4">
             <div ref={fileNameBoxRef} className="overflow-hidden">
               <div
                 className={marqueeDistance > 0 ? "flex w-max" : undefined}
@@ -1107,26 +1108,6 @@ export default function PlayerPage() {
         defaultSize="small"
         collapsible
         floatingBottom={TUNER_FLOATING_BOTTOM}
-      />
-
-      {/* Always mounted (not conditionally rendered) so open/close can animate —
-          visibility and interactivity are controlled by the isOpen prop instead. */}
-      <PlaylistModal
-        isOpen={isPlaylistOpen}
-        tracks={playlist}
-        activeTrackId={activeTrackId}
-        errorMessage={addTracksError}
-        onDismissError={() => setAddTracksError(null)}
-        onClose={() => setIsPlaylistOpen(false)}
-        onFilesAdded={handleFilesAdded}
-        onSelectTrack={handleSelectTrack}
-        onRemoveTrack={removeTrackFromPlaylist}
-        onDragHandlePointerDown={handleDragHandlePointerDown}
-        onDragHandlePointerMove={handleDragHandlePointerMove}
-        onDragHandlePointerUp={handleDragHandlePointerUp}
-        onRowPointerDown={handleRowPointerDown}
-        onRowPointerMove={handleRowPointerMove}
-        onRowPointerUp={handleRowPointerUp}
       />
     </div>
   )
