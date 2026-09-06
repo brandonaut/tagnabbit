@@ -156,7 +156,6 @@ export default function PlayerPage() {
 
   const minimapViewportRef = useRef<HTMLDivElement>(null)
   const minimapCanvasRef = useRef<HTMLCanvasElement>(null)
-  const minimapPlayheadRef = useRef<HTMLDivElement>(null)
   const minimapWindowRef = useRef<HTMLDivElement>(null)
   const minimapWidthRef = useRef(0)
   const minimapPointerActiveRef = useRef(false)
@@ -599,28 +598,22 @@ export default function PlayerPage() {
     canvas.style.transform = `translateX(${offset}px)`
     playhead.style.left = `${clamp(offset + time * WAVEFORM_PX_PER_SEC, 0, viewportWidth)}px`
 
-    // The minimap playhead and window box are driven from the same frame: the
-    // window box marks the slice the detail waveform above is currently showing,
-    // derived from the very `offset` just computed so the two never disagree.
+    // The minimap window box marks the slice the detail waveform above is
+    // currently showing, derived from the very `offset` just computed so the
+    // two never disagree.
     const minimapWidth = minimapWidthRef.current
-    const minimapPlayhead = minimapPlayheadRef.current
     const minimapWindow = minimapWindowRef.current
     const trackDuration = audioRef.current?.duration ?? 0
-    if (minimapWidth > 0 && Number.isFinite(trackDuration) && trackDuration > 0) {
-      if (minimapPlayhead) {
-        minimapPlayhead.style.left = `${(time / trackDuration) * minimapWidth}px`
-        minimapPlayhead.hidden = false
-      }
-      if (minimapWindow) {
+    if (minimapWindow) {
+      if (minimapWidth > 0 && Number.isFinite(trackDuration) && trackDuration > 0) {
         const spanSeconds = viewportWidth / WAVEFORM_PX_PER_SEC
         const startTime = canvasWidth <= viewportWidth ? 0 : -offset / WAVEFORM_PX_PER_SEC
         minimapWindow.style.left = `${(startTime / trackDuration) * minimapWidth}px`
         minimapWindow.style.width = `${clamp(spanSeconds / trackDuration, 0, 1) * minimapWidth}px`
         minimapWindow.hidden = false
+      } else {
+        minimapWindow.hidden = true
       }
-    } else {
-      if (minimapPlayhead) minimapPlayhead.hidden = true
-      if (minimapWindow) minimapWindow.hidden = true
     }
   }, [])
 
@@ -964,11 +957,6 @@ export default function PlayerPage() {
                     backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)",
                   }}
                 />
-                <div
-                  ref={minimapPlayheadRef}
-                  hidden
-                  className="pointer-events-none absolute inset-y-0 w-px bg-[var(--accent)]"
-                />
                 <input
                   type="range"
                   min={0}
@@ -1005,9 +993,14 @@ export default function PlayerPage() {
                 type="button"
                 onClick={togglePlay}
                 aria-label={isPlaying ? "Pause" : "Play"}
-                className="py-3 px-4"
+                className="flex h-14 w-14 items-center justify-center rounded-full border-2"
+                style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
               >
-                {isPlaying ? <Pause size={32} /> : <Play size={32} />}
+                {isPlaying ? (
+                  <Pause size={26} fill="currentColor" />
+                ) : (
+                  <Play size={26} fill="currentColor" className="translate-x-0.5" />
+                )}
               </button>
               <button
                 type="button"
