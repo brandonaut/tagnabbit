@@ -122,7 +122,7 @@ const DOUBLE_TAP_MS = 300
 export default function PlayerPage() {
   const [playlist, setPlaylist] = useState<PlaylistTrack[]>([])
   const [activeTrackId, setActiveTrackId] = useState<string | null>(null)
-  const [isPlaylistOpen, setIsPlaylistOpen] = useState(true)
+  const [isPlaylistOpen, setIsPlaylistOpen] = useState(false)
   const [addTracksError, setAddTracksError] = useState<string | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(0)
