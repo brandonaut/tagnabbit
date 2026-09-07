@@ -1,8 +1,4 @@
-## Purpose
-
-Gives the user a persistent, always-reachable way to move between the app's main screens (search, favorites, player) and to toggle the tuner overlay, replacing the two-screen nav pill with a bar that scales to more destinations. The bar is also present on the tag detail screen.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Bottom tab bar destinations
 The system SHALL show a bottom tab bar with three navigation destinations — Search, Favorites, and Player — each represented by an icon and a text label, plus a fourth slot that toggles the tuner overlay (see `tuner-overlay`) rather than navigating.
@@ -36,20 +32,6 @@ The tuner slot SHALL indicate whether the overlay is currently open, as a presse
 #### Scenario: Tuner slot reflects overlay state
 - **WHEN** the tuner overlay is open
 - **THEN** the tab bar's tuner slot shows a pressed state, returning to its default state when the overlay closes
-
-### Requirement: Tab bar stays reachable while scrolling
-The tab bar SHALL remain fixed at the bottom of the viewport, staying visible as the screen content above it scrolls.
-
-#### Scenario: Scrolling a long list leaves the tab bar in place
-- **WHEN** a user scrolls a screen whose content is taller than the viewport (e.g. a long list of search results)
-- **THEN** the tab bar remains visible at the bottom of the viewport throughout the scroll
-
-### Requirement: Tab bar avoids system UI overlap
-On a device with a system gesture area or home indicator at the bottom of the screen, the tab bar SHALL be padded so its content is not obscured by or overlapping that system UI.
-
-#### Scenario: Device with a bottom home indicator
-- **WHEN** the app runs on a device that reserves a bottom inset for a home indicator or gesture area
-- **THEN** the tab bar's content renders fully above that reserved area
 
 ### Requirement: Tab bar is not shown outside its four screens
 The tab bar SHALL be shown on the search, favorites, player, and tag detail screens, and SHALL NOT be shown on any other screen.

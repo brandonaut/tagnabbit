@@ -1,4 +1,4 @@
-import { CircleGauge, Maximize2, Minimize2 } from "lucide-react"
+import { GripHorizontal, Maximize2, Minimize2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { wedgeColor } from "./noteColors"
 import { NOTE_DISPLAY, NOTE_FREQUENCIES, NOTE_NAMES } from "./notes"
@@ -31,6 +31,7 @@ import {
   semitoneToNote,
   type Target,
 } from "./tuner/tuning"
+import { clampToViewport, defaultTunerPosition, TAB_BAR_PX } from "./tunerPlacement"
 
 interface WheelProps {
   detectedNoteIdx: number | null
@@ -285,28 +286,27 @@ const JUMP_CENTS = 70
 const HYSTERESIS_CENTS = 5
 const SILENCE_HOLD_MS = 300
 
-interface Props {
-  defaultSize?: "small" | "large"
-  variant?: "floating" | "inline"
-  visible?: boolean
-  collapsible?: boolean
-  // How far the floating variant sits from the bottom of the viewport — override
-  // when another fixed-position element (e.g. a bottom tab bar) would otherwise
-  // overlap it. Ignored for the inline variant.
-  floatingBottom?: string
-}
+// Rough small-panel footprint, only used to place the overlay before it has mounted and
+// measured itself; the mount-time clamp corrects it against the real size.
+const EST_PANEL = { w: 256, h: 284 }
 
-export default function Tuner({
-  defaultSize = "small",
-  variant = "floating",
-  visible = true,
-  collapsible = false,
-  floatingBottom = "0.75rem",
-}: Props) {
+export default function Tuner() {
   const [active, setActive] = useState(false)
   const [pitch, setPitch] = useState<PitchInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [size, setSize] = useState<"small" | "large">(defaultSize)
+  const [size, setSize] = useState<"small" | "large">("small")
+  const [pos, setPos] = useState(() => defaultTunerPosition(EST_PANEL.w, EST_PANEL.h, TAB_BAR_PX))
+  const panelRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{ pointerId: number; offsetX: number; offsetY: number } | null>(null)
+
+  // How much the bottom tab bar currently intrudes into the viewport. Zero on the tag
+  // detail screen when the immersive chrome is hidden and the bar is translated off — so
+  // the overlay can then be dragged all the way to the bottom edge.
+  const bottomReserve = useCallback(() => {
+    const nav = document.querySelector<HTMLElement>("nav[data-tabbar]")
+    if (!nav) return TAB_BAR_PX
+    return Math.max(0, window.innerHeight - nav.getBoundingClientRect().top)
+  }, [])
 
   // The displayed target is sticky so the note name has hysteresis at wedge edges rather
   // than depending on frames agreeing with each other.
@@ -358,8 +358,6 @@ export default function Tuner({
     resetSmoothing()
   }, [resetSmoothing])
 
-  useEffect(() => stop, [stop])
-
   useEffect(() => {
     return () => {
       for (const audio of gesturesAudioRef.current.values()) {
@@ -373,129 +371,139 @@ export default function Tuner({
     }
   }, [])
 
-  async function toggle() {
-    if (active) {
-      stop()
-      setActive(false)
+  const start = useCallback(
+    async (isCancelled: () => boolean) => {
       setError(null)
-      setPitch(null)
-      return
-    }
-
-    setError(null)
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError("Microphone not supported")
-      return
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        // The browser enables all three by default. They are tuned for speech and are
-        // hostile to sustained tones: gain control destabilizes the RMS floor, noise
-        // suppression distorts held notes, and echo cancellation tries to subtract the
-        // pitch-pipe tone this app plays. Advisory — a browser may ignore them.
-        audio: { autoGainControl: false, noiseSuppression: false, echoCancellation: false },
-        video: false,
-      })
-      const ctx = new AudioContext()
-      const source = ctx.createMediaStreamSource(stream)
-      const analyser = ctx.createAnalyser()
-      analyser.fftSize = FFT_SIZE
-      source.connect(analyser)
-      const buffer = new Float32Array(analyser.fftSize)
-      // Allocated once and reused; the tick loop must not allocate.
-      const buffers: DetectBuffers = {
-        decimated: new Float32Array(DECIMATED_SIZE),
-        power: new Float32Array(FFT_SIZE + 1),
-        coarsePower: new Float32Array(DECIMATED_SIZE + 1),
-        coarse: new Float32Array(DECIMATED_SIZE),
-        scratch: new Float32Array(REFINE_HALF_WIDTH * 2 + 1),
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError("Microphone not supported")
+        return
       }
-      audioRef.current = { ctx, analyser, stream, buffer, buffers }
-      setActive(true)
 
-      function tick(timestamp: number) {
-        if (timestamp - lastTickRef.current < TICK_INTERVAL_MS) {
-          animRef.current = requestAnimationFrame(tick)
-          return
-        }
-        lastTickRef.current = timestamp
-
-        if (gesturesAudioRef.current.size > 0) {
-          // A wheel note is playing — skip analysis so the mic doesn't drive the display
-          // while attention is on the wheel.
-          animRef.current = requestAnimationFrame(tick)
-          return
-        }
-
-        const audio = audioRef.current
-        if (!audio) return
-
-        audio.analyser.getFloatTimeDomainData(audio.buffer)
-        const freq = detectPitch(audio.buffer, audio.buffers, audio.ctx.sampleRate)
-
-        if (freq > 0) {
-          if (silenceTimerRef.current) {
-            clearTimeout(silenceTimerRef.current)
-            silenceTimerRef.current = null
-          }
-
-          const raw = freqToCents(freq)
-          const history = historyRef.current
-          history[historyCountRef.current % 3] = raw
-          historyCountRef.current++
-          const median =
-            historyCountRef.current >= 3 ? median3(history[0], history[1], history[2]) : raw
-
-          const smoothedBefore = smoothedCentsRef.current
-          if (smoothedBefore === null || Math.abs(median - smoothedBefore) > JUMP_CENTS) {
-            // A deliberate note change. Land on it rather than sweeping through every
-            // pitch in between and rendering notes that were never sung.
-            smoothedCentsRef.current = median
-            displayedTargetRef.current = null
-          } else {
-            smoothedCentsRef.current = EMA_ALPHA * median + (1 - EMA_ALPHA) * smoothedBefore
-          }
-          const smoothed = smoothedCentsRef.current
-
-          // Hysteresis: hold the current target until the pitch passes a little past the
-          // wedge edge — 50¢, the midpoint to the next note.
-          const target = displayedTargetRef.current
-          const deviation = target === null ? 0 : smoothed - target.targetCents
-          const held =
-            target !== null &&
-            deviation <= 50 + HYSTERESIS_CENTS &&
-            deviation >= -50 - HYSTERESIS_CENTS
-          const current = held ? target : etTarget(smoothed)
-          displayedTargetRef.current = current
-
-          const offset = smoothed - current.targetCents
-          const { note, octave } = semitoneToNote(current.semitone)
-          setPitch({
-            note,
-            octave,
-            cents: Math.round(offset),
-            angleOffset: centsToAngle(offset),
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          // The browser enables all three by default. They are tuned for speech and are
+          // hostile to sustained tones: gain control destabilizes the RMS floor, noise
+          // suppression distorts held notes, and echo cancellation tries to subtract the
+          // pitch-pipe tone this app plays. Advisory — a browser may ignore them.
+          audio: { autoGainControl: false, noiseSuppression: false, echoCancellation: false },
+          video: false,
+        })
+        if (isCancelled()) {
+          stream.getTracks().forEach((t) => {
+            t.stop()
           })
-        } else if (!silenceTimerRef.current) {
-          silenceTimerRef.current = setTimeout(() => {
-            setPitch(null)
-            resetSmoothing()
-            silenceTimerRef.current = null
-          }, SILENCE_HOLD_MS)
+          return
         }
+        const ctx = new AudioContext()
+        const source = ctx.createMediaStreamSource(stream)
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = FFT_SIZE
+        source.connect(analyser)
+        const buffer = new Float32Array(analyser.fftSize)
+        // Allocated once and reused; the tick loop must not allocate.
+        const buffers: DetectBuffers = {
+          decimated: new Float32Array(DECIMATED_SIZE),
+          power: new Float32Array(FFT_SIZE + 1),
+          coarsePower: new Float32Array(DECIMATED_SIZE + 1),
+          coarse: new Float32Array(DECIMATED_SIZE),
+          scratch: new Float32Array(REFINE_HALF_WIDTH * 2 + 1),
+        }
+        audioRef.current = { ctx, analyser, stream, buffer, buffers }
+        setActive(true)
 
+        function tick(timestamp: number) {
+          if (timestamp - lastTickRef.current < TICK_INTERVAL_MS) {
+            animRef.current = requestAnimationFrame(tick)
+            return
+          }
+          lastTickRef.current = timestamp
+
+          if (gesturesAudioRef.current.size > 0) {
+            // A wheel note is playing — skip analysis so the mic doesn't drive the display
+            // while attention is on the wheel.
+            animRef.current = requestAnimationFrame(tick)
+            return
+          }
+
+          const audio = audioRef.current
+          if (!audio) return
+
+          audio.analyser.getFloatTimeDomainData(audio.buffer)
+          const freq = detectPitch(audio.buffer, audio.buffers, audio.ctx.sampleRate)
+
+          if (freq > 0) {
+            if (silenceTimerRef.current) {
+              clearTimeout(silenceTimerRef.current)
+              silenceTimerRef.current = null
+            }
+
+            const raw = freqToCents(freq)
+            const history = historyRef.current
+            history[historyCountRef.current % 3] = raw
+            historyCountRef.current++
+            const median =
+              historyCountRef.current >= 3 ? median3(history[0], history[1], history[2]) : raw
+
+            const smoothedBefore = smoothedCentsRef.current
+            if (smoothedBefore === null || Math.abs(median - smoothedBefore) > JUMP_CENTS) {
+              // A deliberate note change. Land on it rather than sweeping through every
+              // pitch in between and rendering notes that were never sung.
+              smoothedCentsRef.current = median
+              displayedTargetRef.current = null
+            } else {
+              smoothedCentsRef.current = EMA_ALPHA * median + (1 - EMA_ALPHA) * smoothedBefore
+            }
+            const smoothed = smoothedCentsRef.current
+
+            // Hysteresis: hold the current target until the pitch passes a little past the
+            // wedge edge — 50¢, the midpoint to the next note.
+            const target = displayedTargetRef.current
+            const deviation = target === null ? 0 : smoothed - target.targetCents
+            const held =
+              target !== null &&
+              deviation <= 50 + HYSTERESIS_CENTS &&
+              deviation >= -50 - HYSTERESIS_CENTS
+            const current = held ? target : etTarget(smoothed)
+            displayedTargetRef.current = current
+
+            const offset = smoothed - current.targetCents
+            const { note, octave } = semitoneToNote(current.semitone)
+            setPitch({
+              note,
+              octave,
+              cents: Math.round(offset),
+              angleOffset: centsToAngle(offset),
+            })
+          } else if (!silenceTimerRef.current) {
+            silenceTimerRef.current = setTimeout(() => {
+              setPitch(null)
+              resetSmoothing()
+              silenceTimerRef.current = null
+            }, SILENCE_HOLD_MS)
+          }
+
+          animRef.current = requestAnimationFrame(tick)
+        }
         animRef.current = requestAnimationFrame(tick)
+      } catch (e) {
+        const msg =
+          e instanceof Error && e.name === "NotAllowedError"
+            ? "Microphone access denied"
+            : "Could not access microphone"
+        setError(msg)
       }
-      animRef.current = requestAnimationFrame(tick)
-    } catch (e) {
-      const msg =
-        e instanceof Error && e.name === "NotAllowedError"
-          ? "Microphone access denied"
-          : "Could not access microphone"
-      setError(msg)
+    },
+    [resetSmoothing],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    start(() => cancelled)
+    return () => {
+      cancelled = true
+      stop()
     }
-  }
+  }, [start, stop])
 
   function handlePlayStart(pointerId: number, noteIdx: number) {
     if (gesturesAudioRef.current.has(pointerId)) return
@@ -543,72 +551,120 @@ export default function Tuner({
   const absC = pitch ? Math.abs(pitch.cents) : 0
   const centsColor = pitch ? (absC <= 10 ? "#4ade80" : absC <= 25 ? "#facc15" : "#f87171") : "#888"
   const detectedNoteIdx = active && pitch ? NOTE_NAMES.indexOf(pitch.note) : null
-  const isFloating = variant === "floating"
+
+  const scale = size === "large" ? 1.4 : 1
+
+  useEffect(() => {
+    function clampNow() {
+      const el = panelRef.current
+      if (!el) return
+      const clamped = clampToViewport(
+        { x: pos.x, y: pos.y },
+        el.offsetWidth * scale,
+        el.offsetHeight * scale,
+        bottomReserve(),
+      )
+      if (clamped.x !== pos.x || clamped.y !== pos.y) setPos(clamped)
+    }
+    clampNow()
+    window.addEventListener("resize", clampNow)
+    // Re-clamp as the tab bar slides in/out with the tag detail immersive chrome, so a
+    // panel parked at the bottom isn't left under the bar when it returns.
+    const nav = document.querySelector("nav[data-tabbar]")
+    const io = nav ? new IntersectionObserver(clampNow, { threshold: [0, 0.5, 1] }) : null
+    if (nav && io) io.observe(nav)
+    return () => {
+      window.removeEventListener("resize", clampNow)
+      io?.disconnect()
+    }
+  }, [pos.x, pos.y, scale, bottomReserve])
+
+  function handleDragStart(e: React.PointerEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("button")) return
+    const el = panelRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragRef.current = {
+      pointerId: e.pointerId,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    }
+  }
+
+  function handleDragMove(e: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== e.pointerId) return
+    const el = panelRef.current
+    if (!el) return
+    setPos(
+      clampToViewport(
+        { x: e.clientX - drag.offsetX, y: e.clientY - drag.offsetY },
+        el.offsetWidth * scale,
+        el.offsetHeight * scale,
+        bottomReserve(),
+      ),
+    )
+  }
+
+  function handleDragEnd(e: React.PointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId === e.pointerId) dragRef.current = null
+  }
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation only, not an interactive element
-    // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation only, not an interactive element
     <div
-      className={
-        isFloating
-          ? `fixed right-3 opacity-90 z-50 flex flex-col items-end gap-1 transition-transform duration-300 ${visible ? "translate-y-0" : "translate-y-24"}`
-          : "flex flex-col items-center gap-1"
-      }
-      style={isFloating ? { bottom: floatingBottom } : undefined}
-      onClick={isFloating ? (e) => e.stopPropagation() : undefined}
+      ref={panelRef}
+      className="fixed z-50 flex flex-col rounded-lg overflow-hidden"
+      style={{
+        left: pos.x,
+        top: pos.y,
+        transform: `scale(${scale})`,
+        transformOrigin: "top left",
+        transition: "transform 0.2s ease-out",
+        background: "var(--bg-surface)",
+        border: "1px solid var(--border)",
+        opacity: 0.82,
+      }}
     >
-      {(!collapsible || active) && (
-        <div
-          className="relative rounded-lg p-2 flex flex-col items-center gap-1"
-          style={{
-            background: "var(--bg-surface)",
-            border: "1px solid var(--border)",
-            transform: size === "large" ? "scale(1.4)" : "scale(1)",
-            transformOrigin: isFloating ? "bottom right" : "top center",
-            transition: "transform 0.2s ease-out",
-          }}
-        >
-          <button
-            type="button"
-            className="absolute top-1 right-1 p-1 bg-transparent border-transparent"
-            style={{ color: "var(--text-muted)" }}
-            onClick={() => setSize((v) => (v === "large" ? "small" : "large"))}
-            aria-label={size === "large" ? "Shrink tuner" : "Enlarge tuner"}
-            title={size === "large" ? "Shrink tuner" : "Enlarge tuner"}
-          >
-            {size === "large" ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
-          <PitchWheel
-            detectedNoteIdx={detectedNoteIdx}
-            cents={pitch?.cents ?? 0}
-            angleOffset={pitch?.angleOffset ?? 0}
-            color={centsColor}
-            noteName={active ? (pitch?.note ?? null) : null}
-            octave={active ? (pitch?.octave ?? null) : null}
-            onPlayStart={handlePlayStart}
-            onNoteChange={handleNoteChange}
-            onPlayStop={handlePlayStop}
-          />
-        </div>
-      )}
-      {!active && error && (
-        <div
-          className={`text-xs max-w-[10rem] ${isFloating ? "text-right" : "text-center"}`}
-          style={{ color: "#f87171" }}
-        >
-          {error}
-        </div>
-      )}
-      <button
-        type="button"
-        className={`py-[0.45em] px-[0.65em] select-none${active ? " bg-[#646cff] border-[#646cff] text-white" : ""}`}
-        style={active ? undefined : { backgroundColor: "var(--accent)", color: "#10141e" }}
-        onClick={toggle}
-        aria-label={active ? "Stop tuner" : "Start tuner"}
-        title={active ? "Stop tuner" : "Tune"}
+      <div
+        className="flex items-center justify-between px-1.5 py-1 select-none"
+        style={{ borderBottom: "1px solid var(--border)", cursor: "move", touchAction: "none" }}
+        onPointerDown={handleDragStart}
+        onPointerMove={handleDragMove}
+        onPointerUp={handleDragEnd}
+        onPointerCancel={handleDragEnd}
       >
-        <CircleGauge size={18} />
-      </button>
+        <GripHorizontal size={14} style={{ color: "var(--text-muted)" }} />
+        <button
+          type="button"
+          className="p-1 bg-transparent border-transparent"
+          style={{ color: "var(--text-muted)" }}
+          onClick={() => setSize((v) => (v === "large" ? "small" : "large"))}
+          aria-label={size === "large" ? "Shrink tuner" : "Enlarge tuner"}
+          title={size === "large" ? "Shrink tuner" : "Enlarge tuner"}
+        >
+          {size === "large" ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        </button>
+      </div>
+
+      <div className="p-2 flex flex-col items-center gap-1">
+        <PitchWheel
+          detectedNoteIdx={detectedNoteIdx}
+          cents={pitch?.cents ?? 0}
+          angleOffset={pitch?.angleOffset ?? 0}
+          color={centsColor}
+          noteName={active ? (pitch?.note ?? null) : null}
+          octave={active ? (pitch?.octave ?? null) : null}
+          onPlayStart={handlePlayStart}
+          onNoteChange={handleNoteChange}
+          onPlayStop={handlePlayStop}
+        />
+        {error && (
+          <div className="text-xs text-center max-w-[12rem]" style={{ color: "#f87171" }}>
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

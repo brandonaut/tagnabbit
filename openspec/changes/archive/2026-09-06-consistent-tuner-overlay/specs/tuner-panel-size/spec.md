@@ -1,21 +1,4 @@
-## Purpose
-
-The `Tuner` panel supports two overall sizes, small and large, toggled via a corner button.
-This spec defines the two size states, how the panel scales in place, and the single small default the overlay opens at every time (it is a drag-positioned, non-persistent overlay — see `tuner-overlay`).
-
-## Requirements
-
-### Requirement: Two-state panel size toggle
-The `Tuner` panel SHALL support exactly two size states, small and large, toggled by a button positioned in the panel's corner.
-The whole panel — pitch wheel, key picker, and the corner button itself — SHALL scale together as a single unit between the two states.
-
-#### Scenario: Corner button toggles panel size
-- **WHEN** the user activates the panel's corner size button while the panel is in the small state
-- **THEN** the panel, including the pitch wheel and key picker, renders in the large state
-
-#### Scenario: Toggling back to small
-- **WHEN** the user activates the panel's corner size button while the panel is in the large state
-- **THEN** the panel returns to the small state
+## MODIFIED Requirements
 
 ### Requirement: Page-level default panel size
 The tuner overlay SHALL have a single size default, small, applied every time the overlay opens, independent of which screen it is opened from.
@@ -33,6 +16,8 @@ A size change SHALL last only for the current open session; it SHALL NOT be reme
 - **WHEN** a user toggles the panel to large, then reloads the app and opens the overlay
 - **THEN** the panel renders small
 
+## ADDED Requirements
+
 ### Requirement: Panel keeps its screen position when resized
 When the panel's size state changes, its on-screen position SHALL remain stable rather than snapping to a screen edge.
 If the new size would extend past the viewport or over the bottom tab bar, the panel SHALL be nudged back so it stays fully visible and clear of the tab bar (consistent with the clamping in `tuner-overlay`).
@@ -45,9 +30,12 @@ If the new size would extend past the viewport or over the bottom tab bar, the p
 - **WHEN** the user enlarges the panel while it sits near a screen edge such that the larger size would extend past the viewport
 - **THEN** the panel is nudged back so it remains fully within the viewport and clear of the tab bar
 
-### Requirement: Enlarged panel may overlap page content
-The panel's large size state SHALL NOT be constrained to avoid overlapping other on-screen content, including sheet music on a tag page.
+## REMOVED Requirements
 
-#### Scenario: Large panel covers sheet music
-- **WHEN** the panel is toggled to large on a tag page
-- **THEN** it renders at full large size even if it visually overlaps the sheet music beneath it
+### Requirement: Panel scales anchored to its bottom-right corner
+**Reason**: The overlay's position is now controlled by the user dragging it, and it scales in place, so it no longer stays pinned to a fixed screen corner as it resizes. (Each open still *starts* in the bottom-right corner — see `tuner-overlay` — but that is a starting position, not a scaling anchor.)
+**Migration**: Replaced by "Panel keeps its screen position when resized".
+
+### Requirement: Size toggle only available while the panel is showing
+**Reason**: The collapsible floating tuner and its round tune-toggle button are removed. The overlay is either open — panel and its corner size button both shown — or closed, with nothing shown; there is no collapsed state in which to conditionally hide the size button.
+**Migration**: None. The corner size button is present whenever the overlay is open.

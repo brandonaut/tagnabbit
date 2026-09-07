@@ -4,16 +4,24 @@ import type { Tag } from "./api/tags"
 import { getSheetMusic } from "./cache/sheetMusic"
 import PdfViewer from "./PdfViewer"
 import { resolveTag } from "./resolveTag"
-import Tuner from "./Tuner"
+import TabBar from "./TabBar"
 import { useWakeLock } from "./useWakeLock"
 
 interface Props {
   id: string
   favorites: Record<string, Tag>
   onToggleFavorite: (tag: Tag) => void
+  tunerOpen: boolean
+  onToggleTuner: () => void
 }
 
-export default function TagPage({ id, favorites, onToggleFavorite }: Props) {
+export default function TagPage({
+  id,
+  favorites,
+  onToggleFavorite,
+  tunerOpen,
+  onToggleTuner,
+}: Props) {
   const [tag, setTag] = useState<Tag | null>(null)
   const [tagState, setTagState] = useState<"loading" | "found" | "not-found">("loading")
   const favorited = tag ? !!favorites[tag.id] : false
@@ -329,9 +337,14 @@ export default function TagPage({ id, favorites, onToggleFavorite }: Props) {
               )}
             </div>
           </div>
-          <Tuner defaultSize="small" visible={uiVisible} collapsible />
         </>
       )}
+
+      <TabBar
+        hidden={!!objectUrl && !uiVisible}
+        tunerOpen={tunerOpen}
+        onToggleTuner={onToggleTuner}
+      />
     </div>
   )
 }

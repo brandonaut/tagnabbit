@@ -10,12 +10,9 @@ import {
   setGlobalState,
 } from "./cache/playerFile"
 import PlaylistList from "./PlaylistList"
-import Tuner from "./Tuner"
 import { useWakeLock } from "./useWakeLock"
 
 const SKIP_SECONDS = 10
-// Clears the bottom tab bar's own height (see Layout.tsx) plus its usual gap.
-const TUNER_FLOATING_BOTTOM = "calc(3.75rem + env(safe-area-inset-bottom) + 0.75rem)"
 const MARQUEE_PX_PER_SEC = 22
 const MARQUEE_MIN_SECONDS = 8
 const MARQUEE_MAX_SECONDS = 20
@@ -1094,8 +1091,6 @@ export default function PlayerPage() {
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onEnded={handleTrackEnded}
       />
-
-      <Tuner defaultSize="small" collapsible floatingBottom={TUNER_FLOATING_BOTTOM} />
     </div>
   )
 }
