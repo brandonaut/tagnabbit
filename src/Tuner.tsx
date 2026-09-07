@@ -65,6 +65,19 @@ function PitchWheel({
   const arcAngle = lastArcAngleRef.current
 
   const svgRef = useRef<SVGSVGElement>(null)
+
+  // Chrome ignores `touch-action` on SVG, so a press-and-hold on a wedge still
+  // arms Android's long-press context-menu gesture and fires its haptic. React
+  // registers onTouchStart as passive, so the only way to cancel that gesture is
+  // a non-passive listener that calls preventDefault before it starts.
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+    const block = (e: TouchEvent) => e.preventDefault()
+    el.addEventListener("touchstart", block, { passive: false })
+    return () => el.removeEventListener("touchstart", block)
+  }, [])
+
   // Each active pointer glides independently; noteIdx is whichever wedge that
   // pointer's angle currently falls under, updated as it crosses boundaries.
   const gesturesRef = useRef<Map<number, number>>(new Map())
@@ -110,6 +123,7 @@ function PitchWheel({
       width={240}
       height={240}
       aria-label="Pitch wheel tuner"
+      onContextMenu={(e) => e.preventDefault()}
       style={{
         userSelect: "none",
         WebkitUserSelect: "none",
@@ -647,7 +661,10 @@ export default function Tuner() {
         </button>
       </div>
 
-      <div className="p-2 flex flex-col items-center gap-1">
+      <div
+        className="p-2 flex flex-col items-center gap-1"
+        style={{ touchAction: "none", userSelect: "none", WebkitUserSelect: "none" }}
+      >
         <PitchWheel
           detectedNoteIdx={detectedNoteIdx}
           cents={pitch?.cents ?? 0}
