@@ -990,13 +990,13 @@ export default function PlayerPage() {
                 type="button"
                 onClick={togglePlay}
                 aria-label={isPlaying ? "Pause" : "Play"}
-                className="flex h-14 w-14 items-center justify-center rounded-full border-2"
+                className="flex h-16 w-16 items-center justify-center rounded-full border-2"
                 style={{ borderColor: "var(--accent)", color: "var(--accent)" }}
               >
                 {isPlaying ? (
-                  <Pause size={26} fill="currentColor" />
+                  <Pause size={34} fill="currentColor" />
                 ) : (
-                  <Play size={26} fill="currentColor" className="translate-x-0.5" />
+                  <Play size={34} fill="currentColor" className="translate-x-0.5" />
                 )}
               </button>
               <button
